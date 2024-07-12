@@ -10,12 +10,15 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/rooms')
         .then(response => response.json())
         .then(rooms => {
+            roomList.innerHTML = '';  // 이전 목록을 지우고 새로 업데이트
             rooms.forEach(room => {
                 const li = document.createElement('li');
-                li.textContent = room.name;
+                li.innerHTML = `
+                    ${room.name} (${room.user_count})
+                    ${room.has_password ? '<i class="fas fa-lock"></i>' : ''}
+                `;
                 li.onclick = async () => {
                     if (room.has_password) {
-                        console.log(room.id)
                         const password = prompt("Enter the password for the room:");
                         if (password !== null) {
                             const response = await fetch('/check_password', {

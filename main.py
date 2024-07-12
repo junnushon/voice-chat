@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -36,21 +36,16 @@ class ConnectionManager:
         self.room_details: Dict[str, Dict] = {}
 
     async def connect(self, websocket: WebSocket, room: str, password: str = None):
-        try:
-            await websocket.accept()
-            if room not in self.rooms:
-                await websocket.close(code=1000, reason="Room does not exist")
-                return
-            room_password = self.room_details[room].get('password')
-            if room_password:
-                if room_password != password:
-                    await websocket.close(code=4001, reason="Invalid password")
-                    return
-            self.rooms[room].append(websocket)
-            self.active_connections.append(websocket)
-        except Exception as e:
-            print(f'Error during WebSocket connection: {e}')
-            await websocket.close(code=1011, reason="Internal server error")
+        await websocket.accept()
+        if room not in self.rooms:
+            await websocket.close(code=1000, reason="Room does not exist")
+            return
+        room_password = self.room_details[room].get('password')
+        if room_password and room_password != password:
+            await websocket.close(code=4001, reason="Invalid password")
+            return
+        self.rooms[room].append(websocket)
+        self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
@@ -63,6 +58,16 @@ class ConnectionManager:
             if connection != sender:
                 await connection.send_text(message)
 
+    def get_room_info(self):
+        return [
+            {
+                "id": room_id,
+                "name": self.room_details[room_id]['name'],
+                "has_password": bool(self.room_details[room_id].get('password')),
+                "user_count": len(self.rooms.get(room_id, []))
+            } for room_id in self.rooms
+        ]
+
 manager = ConnectionManager()
 
 @app.websocket("/ws")
@@ -74,18 +79,10 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), passw
             await manager.broadcast(data, websocket, room)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-    except Exception as e:
-        print(f'Unexpected error: {e}')
 
 @app.get("/rooms")
 async def get_rooms():
-    return [
-        {
-            "id": room_id,
-            "name": manager.room_details[room_id]['name'],
-            "has_password": bool(manager.room_details[room_id]['password'])
-        } for room_id in manager.rooms
-    ]
+    return manager.get_room_info()
 
 @app.post("/rooms")
 async def create_room(room: Room):
@@ -95,7 +92,7 @@ async def create_room(room: Room):
     return {"id": room_id, "name": room.name}
 
 @app.post("/check_password")
-async def check_password(payload: PasswordCheckRequest = Body(...)):
+async def check_password(payload: PasswordCheckRequest):
     room = manager.room_details.get(payload.room_id)
     if room is None:
         return JSONResponse(content={"detail": "Room does not exist"}, status_code=404)
