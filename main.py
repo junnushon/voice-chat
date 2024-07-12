@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +11,7 @@ app = FastAPI()
 # CORS 설정
 origins = [
     "http://localhost",
-    "http://127.0.0.1:8000",  # 로컬 주소 추가
+    "http://127.0.0.1:8000",
 ]
 
 app.add_middleware(
@@ -46,12 +47,14 @@ class ConnectionManager:
             return
         self.rooms[room].append(websocket)
         self.active_connections.append(websocket)
+        asyncio.create_task(self.send_user_count(room))
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
         for room in self.rooms:
             if websocket in self.rooms[room]:
                 self.rooms[room].remove(websocket)
+                asyncio.create_task(self.send_user_count(room))
 
     async def broadcast(self, message: str, sender: WebSocket, room: str):
         for connection in self.rooms.get(room, []):
@@ -67,6 +70,16 @@ class ConnectionManager:
                 "user_count": len(self.rooms.get(room_id, []))
             } for room_id in self.rooms
         ]
+
+    async def send_user_count(self, room: str):
+        while room in self.rooms:
+            user_count = len(self.rooms[room])
+            for connection in self.rooms[room]:
+                try:
+                    await connection.send_json({"type": "user_count", "user_count": user_count})
+                except Exception as e:
+                    print(f'Error sending user count: {e}')
+            await asyncio.sleep(5)
 
 manager = ConnectionManager()
 

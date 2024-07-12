@@ -7,6 +7,7 @@ const roomPassword = urlParams.get('password');
 const leaveRoomButton = document.getElementById('leaveRoomButton');
 const remoteAudio = document.getElementById('remoteAudio');
 const roomTitle = document.getElementById('roomTitle');
+const userCountDiv = document.getElementById('userCount');
 
 let localStream;
 let pcs = {};
@@ -53,9 +54,14 @@ async function setupWebSocket() {
         ws.onmessage = async (event) => {
             const message = event.data;
             const data = JSON.parse(message);
-            console.log('Received message:', data);
+            console.log('Received message:', data);  // 전체 메시지 로그 추가
 
-            if (data.from && data.sdp) {
+            if (data.type === 'user_count') {
+                console.log(`Updating ${userCountDiv.textContent} to ${data.user_count}`); // 디버깅 로그 추가
+                if (userCountDiv) {
+                    userCountDiv.textContent = `Users: ${data.user_count}`;
+                }
+            } else if (data.from && data.sdp) {
                 if (!pcs[data.from]) {
                     initializePeerConnection(data.from);
                 }
