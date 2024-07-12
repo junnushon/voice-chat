@@ -12,6 +12,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://127.0.0.1:8000",
+    "https://chat.deeptoon.co.kr",
 ]
 
 app.add_middleware(
