@@ -1,10 +1,10 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict
-import asyncio
 
 app = FastAPI()
 
@@ -35,6 +35,7 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
         self.rooms: Dict[str, List[WebSocket]] = {}
         self.room_details: Dict[str, Dict] = {}
+        self.room_timers: Dict[str, asyncio.TimerHandle] = {}
 
     async def connect(self, websocket: WebSocket, room: str, password: str = None):
         await websocket.accept()
@@ -47,6 +48,9 @@ class ConnectionManager:
             return
         self.rooms[room].append(websocket)
         self.active_connections.append(websocket)
+        if room in self.room_timers:
+            self.room_timers[room].cancel()
+            del self.room_timers[room]
         asyncio.create_task(self.send_user_count(room))
 
     def disconnect(self, websocket: WebSocket):
@@ -54,6 +58,8 @@ class ConnectionManager:
         for room in self.rooms:
             if websocket in self.rooms[room]:
                 self.rooms[room].remove(websocket)
+                if not self.rooms[room]:
+                    self.room_timers[room] = asyncio.get_event_loop().call_later(300, self.delete_room, room)
                 asyncio.create_task(self.send_user_count(room))
 
     async def broadcast(self, message: str, sender: WebSocket, room: str):
@@ -80,6 +86,13 @@ class ConnectionManager:
                 except Exception as e:
                     print(f'Error sending user count: {e}')
             await asyncio.sleep(5)
+
+    def delete_room(self, room: str):
+        if room in self.rooms and not self.rooms[room]:
+            del self.rooms[room]
+            del self.room_details[room]
+            del self.room_timers[room]
+            print(f'Room {room} deleted due to inactivity')
 
 manager = ConnectionManager()
 
