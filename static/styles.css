@@ -14,10 +14,25 @@ body {
     border-radius: 10px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     text-align: center;
+    width: 100%;
+    max-width: 400px; /* Adjusted for better alignment */
 }
 
 h1 {
     margin-bottom: 20px;
+}
+
+.input-group {
+    margin: 10px 0;
+}
+
+input {
+    width: calc(100% - 22px); /* Adjusted to account for padding and border */
+    padding: 10px;
+    margin: 5px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
 }
 
 button {
@@ -26,6 +41,8 @@ button {
     border: none;
     border-radius: 5px;
     cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 button:disabled {

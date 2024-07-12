@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const roomNameInput = document.getElementById('roomName');
     const roomPasswordInput = document.getElementById('roomPassword');
 
+    // Set focus to the room name input field
+    roomNameInput.focus();
+
     createButton.onclick = () => {
         const roomName = roomNameInput.value;
         const roomPassword = roomPasswordInput.value;
