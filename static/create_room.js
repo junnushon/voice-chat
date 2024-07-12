@@ -17,14 +17,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify({ name: roomName, password: roomPassword })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(error => { throw new Error(error.detail); });
+                }
+                return response.json();
+            })
             .then(data => {
                 if (roomPassword) {
                     window.location.href = `/room.html?room=${data.id}&password=${roomPassword}`;
                 } else {
                     window.location.href = `/room.html?room=${data.id}`;
                 }
+            })
+            .catch(error => {
+                alert(error.message);
             });
+        } else {
+            alert("Room name is required");
         }
     };
 });

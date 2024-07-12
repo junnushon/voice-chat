@@ -1,10 +1,10 @@
-import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict
+import asyncio
 
 app = FastAPI()
 
@@ -99,6 +99,10 @@ async def get_rooms():
 
 @app.post("/rooms")
 async def create_room(room: Room):
+    # Check for duplicate room names
+    if any(details["name"] == room.name for details in manager.room_details.values()):
+        raise HTTPException(status_code=400, detail="Room name already exists")
+    
     room_id = str(len(manager.rooms) + 1)
     manager.rooms[room_id] = []
     manager.room_details[room_id] = {"name": room.name, "password": room.password}
