@@ -168,3 +168,17 @@ input[type="password"]:focus {
     outline: none;
     box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
+
+/* Media query for mobile devices */
+@media (max-width: 600px) {
+    body {
+        justify-content: flex-start; /* 화면 위쪽으로 붙이기 */
+        padding-top: 0; /* 위쪽 패딩 제거 */
+        height: 90vh; /* 화면 높이에 맞춤 */
+    }
+
+    .container {
+        margin-top: 0; /* 컨테이너 위쪽 여백 제거 */
+        height: 90vh; /* 화면 높이에 맞춤 */
+    }
+}
