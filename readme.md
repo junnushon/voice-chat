@@ -7,6 +7,9 @@
 
 This is a web-based voice chat application built using FastAPI and WebSockets. Users can create rooms, join existing rooms, and communicate with each other in real-time. The application ensures that rooms are deleted if they are inactive (i.e., have zero users) for more than 5 minutes. Additionally, room names must be unique.
 
+---
+이것은 FastAPI와 WebSockets를 사용하여 구축된 웹 기반 음성 채팅 애플리케이션입니다. 사용자는 방을 생성하고, 기존 방에 참여하며, 실시간으로 서로 소통할 수 있습니다. 이 애플리케이션은 방이 비활성 상태(즉, 사용자가 0명인 상태)가 5분 이상 지속되면 해당 방을 자동으로 삭제합니다. 또한, 방 이름은 중복되지 않도록 보장합니다.
+
 ## Features
 
 - Real-time voice communication
@@ -15,12 +18,19 @@ This is a web-based voice chat application built using FastAPI and WebSockets. U
 - User count display in each room
 - Unique room names enforced
 
+---
+- 실시간 음성 통신
+- 비밀번호 보호 선택이 가능한 방 생성
+- 비활성 상태인 방의 자동 삭제
+- 각 방에 사용자 수 표시
+- 고유한 방 이름 보장
+
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.8 or higher
-- Node.js (for serving static files and frontend dependencies)
+- FastAPI (for serving static files and frontend dependencies)
 
 ### Installation
 
@@ -41,17 +51,9 @@ This is a web-based voice chat application built using FastAPI and WebSockets. U
 3. Install the required Python packages:
 
     ```bash
-    pip install -r requirements.txt
+    pip install fastapi
     ```
 
-4. Install frontend dependencies (if any):
-
-    ```bash
-    # Example if using npm
-    cd static
-    npm install
-    cd ..
-    ```
 
 ### Running the Application
 
@@ -60,8 +62,12 @@ This is a web-based voice chat application built using FastAPI and WebSockets. U
     ```bash
     uvicorn main:app --reload
     ```
+    ```bash
+    or
+    python main.py
+    ```
 
-2. Open your web browser and navigate to `http://127.0.0.1:8000` to use the application.
+2. Open your web browser and navigate to `http://localhost:8000` to use the application.
 
 ### Project Structure
 ```graphql
