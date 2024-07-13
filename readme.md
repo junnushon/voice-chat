@@ -1,9 +1,9 @@
 # Voice Chat Application
-![GitHub repo size](https://img.shields.io/github/repo-size/junnushon/voice-chat-5)
-![GitHub issues](https://img.shields.io/github/issues/junnushon/voice-chat-5)
-![GitHub forks](https://img.shields.io/github/forks/junnushon/voice-chat-5)
-![GitHub stars](https://img.shields.io/github/stars/junnushon/voice-chat-5)
-![GitHub license](https://img.shields.io/github/license/junnushon/voice-chat-5)
+![GitHub repo size](https://img.shields.io/github/repo-size/junnushon/voice-chat)
+![GitHub issues](https://img.shields.io/github/issues/junnushon/voice-chat)
+![GitHub forks](https://img.shields.io/github/forks/junnushon/voice-chat)
+![GitHub stars](https://img.shields.io/github/stars/junnushon/voice-chat)
+![GitHub license](https://img.shields.io/github/license/junnushon/voice-chat)
 
 This is a web-based voice chat application built using FastAPI and WebSockets. Users can create rooms, join existing rooms, and communicate with each other in real-time. The application ensures that rooms are deleted if they are inactive (i.e., have zero users) for more than 5 minutes. Additionally, room names must be unique.
 
@@ -27,8 +27,8 @@ This is a web-based voice chat application built using FastAPI and WebSockets. U
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/junnushon/voice-chat-5.git
-    cd voice-chat-5
+    git clone https://github.com/junnushon/voice-chat.git
+    cd voice-chat
     ```
 
 2. Create and activate a virtual environment:
