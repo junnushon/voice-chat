@@ -84,6 +84,7 @@ li {
     padding: 10px;
     border-bottom: 1px solid #ddd;
     cursor: pointer;
+    background-color: #f9f9f9; /* 가벼운 회색 배경색 추가 */
 }
 
 li span {
@@ -143,4 +144,27 @@ li:hover {
     justify-content: center;
     align-items: center;
     white-space: nowrap; /* 텍스트가 줄 바꿈되지 않도록 설정 */
+}
+
+/* New styles for create room inputs */
+.input-group {
+    margin-bottom: 20px;
+}
+
+input[type="text"],
+input[type="password"] {
+    width: calc(100% - 20px); /* Adjusting for padding */
+    padding: 10px;
+    margin: 0 auto;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+    font-size: 16px;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
