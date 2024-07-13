@@ -113,12 +113,30 @@ li:hover {
     flex-grow: 1;
 }
 
+.chat-message-container {
+    display: flex;
+    width: 100%;
+}
+
 .chat-message {
     margin: 5px 0;
+    padding: 10px;
+    display: inline-block; /* 메시지 크기를 내용에 맞춤 */
+    max-width: 70%;
+    word-wrap: break-word;
+    border-radius: 10px;
+    background-color: #f0f0f0; /* 기본 배경색 */
+    color: #333;
 }
 
 .chat-message.local {
+    background-color: #e0e0e0; /* 옅은 회색 배경색 */
     text-align: right;
+    margin-left: auto; /* 오른쪽 정렬 */
+}
+
+.chat-message.remote {
+    text-align: left;
 }
 
 .chat-input-container {

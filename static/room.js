@@ -212,6 +212,12 @@ function sendMessage() {
 }
 
 function addChatMessage(message, nickname, isLocal = false) {
+    const messageContainer = document.createElement('div'); // Add this line
+    messageContainer.classList.add('chat-message-container'); // Add this line
+    if (isLocal) {
+        messageContainer.classList.add('local'); // Add this line
+    }
+
     const messageElement = document.createElement('div');
     messageElement.classList.add('chat-message');
     if (isLocal) {
@@ -220,6 +226,8 @@ function addChatMessage(message, nickname, isLocal = false) {
     } else {
         messageElement.innerHTML = `<strong>${nickname}:</strong> ${message}`;
     }
-    chatMessages.appendChild(messageElement);
+
+    messageContainer.appendChild(messageElement); // Add this line
+    chatMessages.appendChild(messageContainer); // Update this line
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
