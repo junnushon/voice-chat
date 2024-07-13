@@ -11,6 +11,8 @@ const userCountDiv = document.getElementById('userCount');
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendButton = document.getElementById('sendButton');
+const copyLinkButton = document.getElementById('copyLinkButton');
+const nicknameDisplay = document.getElementById('nicknameDisplay');
 
 let localStream;
 let pcs = {};
@@ -25,6 +27,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/';
         return;
     }
+    nicknameDisplay.textContent = nickname; // 닉네임 표시 추가
     await start();
     await setupWebSocket();
     await call();
@@ -38,6 +41,15 @@ chatInput.addEventListener('keydown', (event) => {
     }
 });
 
+copyLinkButton.onclick = () => {
+    const roomUrl = `${window.location.origin}/room.html?room=${roomId}`;
+    navigator.clipboard.writeText(roomUrl).then(() => {
+        alert('Room link copied to clipboard!');
+    }).catch(err => {
+        alert('Failed to copy the link.');
+    });
+};
+
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
     const rooms = await response.json();
@@ -49,7 +61,7 @@ async function fetchRoomTitle() {
 
 async function setupWebSocket() {
     return new Promise((resolve, reject) => {
-        let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}`;
+        let wsUrl = `ws://localhost:8000/ws?room=${roomId}`;
         if (roomPassword) {
             wsUrl += `&password=${roomPassword}`;
         }
@@ -212,22 +224,18 @@ function sendMessage() {
 }
 
 function addChatMessage(message, nickname, isLocal = false) {
-    const messageContainer = document.createElement('div'); // Add this line
-    messageContainer.classList.add('chat-message-container'); // Add this line
-    if (isLocal) {
-        messageContainer.classList.add('local'); // Add this line
-    }
-
+    const messageWrapper = document.createElement('div');
     const messageElement = document.createElement('div');
     messageElement.classList.add('chat-message');
     if (isLocal) {
         messageElement.classList.add('local');
         messageElement.innerHTML = message;
+        messageWrapper.style.textAlign = 'right';
     } else {
         messageElement.innerHTML = `<strong>${nickname}:</strong> ${message}`;
+        messageWrapper.style.textAlign = 'left';
     }
-
-    messageContainer.appendChild(messageElement); // Add this line
-    chatMessages.appendChild(messageContainer); // Update this line
+    messageWrapper.appendChild(messageElement);
+    chatMessages.appendChild(messageWrapper);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }

@@ -1,5 +1,7 @@
 import asyncio
 import json
+import hashlib
+import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -24,9 +26,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def generate_room_hash(room_name):
+    hash_object = hashlib.sha256()
+    hash_object.update((room_name + str(time.time())).encode('utf-8'))
+    return hash_object.hexdigest()[:8]  # 앞의 8자리만 사용
+
+
 class Room(BaseModel):
     name: str
     password: str = None
+    is_private: bool = False  # 비공개 방 여부 추가
 
 class PasswordCheckRequest(BaseModel):
     room_id: str
@@ -35,7 +44,7 @@ class PasswordCheckRequest(BaseModel):
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
-        self.rooms: Dict[str, List[WebSocket]] = {}
+        self.rooms: Dict[str, List[WebSocket]] = {}  # Dict로 변경
         self.room_details: Dict[str, Dict] = {}
         self.room_timers: Dict[str, asyncio.TimerHandle] = {}
 
@@ -75,6 +84,7 @@ class ConnectionManager:
                 "id": room_id,
                 "name": self.room_details[room_id]['name'],
                 "has_password": bool(self.room_details[room_id].get('password')),
+                "is_private": self.room_details[room_id].get('is_private', False),
                 "user_count": len(self.rooms.get(room_id, []))
             } for room_id in self.rooms
         ]
@@ -126,10 +136,19 @@ async def create_room(room: Room):
     if any(details["name"] == room.name for details in manager.room_details.values()):
         raise HTTPException(status_code=400, detail="Room name already exists")
     
-    room_id = str(len(manager.rooms) + 1)
+    if room.is_private:
+        room_id = generate_room_hash(room.name)
+    else:
+        room_id = str(len(manager.rooms) + 1)
+        
     manager.rooms[room_id] = []
-    manager.room_details[room_id] = {"name": room.name, "password": room.password}
-    return {"id": room_id, "name": room.name}
+    manager.room_details[room_id] = {
+        "name": room.name,
+        "password": room.password,
+        "is_private": room.is_private
+    }
+    return {"id": room_id, "name": room.name, "is_private": room.is_private}
+
 
 @app.post("/check_password")
 async def check_password(payload: PasswordCheckRequest):

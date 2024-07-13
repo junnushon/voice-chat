@@ -23,10 +23,22 @@ body {
 
 .header {
     display: flex;
-    justify-content: center;
+    justify-content: center; /* 중앙 정렬 */
     align-items: center;
     margin-bottom: 10px;
     position: relative;
+}
+
+.nickname-container {
+    position: absolute;
+    right: 10px; /* 화면의 오른쪽 끝에서 약간 떨어지도록 설정 */
+    display: flex;
+    align-items: center;
+}
+
+.nickname-display {
+    font-size: 1em;
+    color: #007bff;
 }
 
 h1 {
