@@ -11,7 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(response => response.json())
         .then(rooms => {
             roomList.innerHTML = '';  // 이전 목록을 지우고 새로 업데이트
+
+            // 전체 방의 수를 업데이트
+            const roomCount = document.getElementById('roomCount');
+            roomCount.textContent = `(${rooms.length})`;
+
             rooms.forEach(room => {
+                if (room.is_private) return;  // 비공개 방은 목록에서 제외
+
                 const li = document.createElement('li');
                 li.innerHTML = `
                     ${room.name} (${room.user_count})
