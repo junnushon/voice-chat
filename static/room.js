@@ -8,19 +8,35 @@ const leaveRoomButton = document.getElementById('leaveRoomButton');
 const remoteAudio = document.getElementById('remoteAudio');
 const roomTitle = document.getElementById('roomTitle');
 const userCountDiv = document.getElementById('userCount');
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const sendButton = document.getElementById('sendButton');
 
 let localStream;
 let pcs = {};
 let ws;
+let nickname = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
+    nickname = prompt("Enter your nickname:");
+    if (!nickname) {
+        alert("Nickname is required!");
+        window.location.href = '/';
+        return;
+    }
     await start();
     await setupWebSocket();
     await call();
 });
 
 leaveRoomButton.onclick = leaveRoom;
+sendButton.onclick = sendMessage;
+chatInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+});
 
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
@@ -54,12 +70,12 @@ async function setupWebSocket() {
         ws.onmessage = async (event) => {
             const message = event.data;
             const data = JSON.parse(message);
-            console.log('Received message:', data);  // 전체 메시지 로그 추가
+            console.log('Received message:', data);
 
             if (data.type === 'user_count') {
-                console.log(`Updating ${userCountDiv.textContent} to ${data.user_count}`); // 디버깅 로그 추가
+                console.log(`Updating user count to ${data.user_count}`);
                 if (userCountDiv) {
-                    userCountDiv.textContent = `Users: ${data.user_count}`;
+                    userCountDiv.textContent = `(${data.user_count})`;
                 }
             } else if (data.from && data.sdp) {
                 if (!pcs[data.from]) {
@@ -80,6 +96,8 @@ async function setupWebSocket() {
                 } catch (e) {
                     console.error('Error adding received ICE candidate', e);
                 }
+            } else if (data.type === 'chat') {
+                addChatMessage(data.message, data.nickname);
             }
         };
 
@@ -182,4 +200,26 @@ function hangup() {
 function leaveRoom() {
     hangup();
     window.location.href = '/';
+}
+
+function sendMessage() {
+    const message = chatInput.value.trim();
+    if (message) {
+        ws.send(JSON.stringify({ type: 'chat', message, nickname }));
+        addChatMessage(message, nickname, true);
+        chatInput.value = '';
+    }
+}
+
+function addChatMessage(message, nickname, isLocal = false) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('chat-message');
+    if (isLocal) {
+        messageElement.classList.add('local');
+        messageElement.innerHTML = message;
+    } else {
+        messageElement.innerHTML = `<strong>${nickname}:</strong> ${message}`;
+    }
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }

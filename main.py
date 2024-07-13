@@ -1,4 +1,5 @@
 import asyncio
+import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +13,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://127.0.0.1:8000",
-    "https://chat.deeptoon.co.kr",
+    "http://chat.deeptoon.co.kr"
 ]
 
 app.add_middleware(
@@ -103,7 +104,15 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), passw
     try:
         while True:
             data = await websocket.receive_text()
-            await manager.broadcast(data, websocket, room)
+            try:
+                data_json = json.loads(data)
+                message_type = data_json.get("type")
+                if message_type == "chat":
+                    await manager.broadcast(json.dumps(data_json), websocket, room)
+                else:
+                    await manager.broadcast(data, websocket, room)
+            except json.JSONDecodeError:
+                print("Received message is not a valid JSON")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
