@@ -10,15 +10,30 @@
 <body>
     <div class="container">
         <div class="header">
-
-        <h1>Voice Chat</h1>
-        <span id="roomCount" class="user-count">(0)</span>
+            <h1>Voice Chat</h1>
+            <span id="roomCount" class="user-count">(0)</span>
         </div>
-        <div id="roomList">
+        <div id="roomList" class="button-container">
             <button id="createRoomButton">Create Room</button>
             <button id="roomListButton">View Rooms</button>
         </div>
     </div>
     <script src="/static/index.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const createRoomButton = document.getElementById('createRoomButton');
+            
+            function updateButtonHeight() {
+                const width = createRoomButton.offsetWidth;
+                createRoomButton.style.height = `${width}px`;
+            }
+
+            // 초기 로드 시 버튼 높이 설정
+            updateButtonHeight();
+
+            // 창 크기 변경 시 버튼 높이 업데이트
+            window.addEventListener('resize', updateButtonHeight);
+        });
+    </script>
 </body>
 </html>
