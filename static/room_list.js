@@ -1,5 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     const roomList = document.getElementById('rooms');
+    const leaveRoomListButton = document.getElementById('leaveRoomListButton');
+
+    leaveRoomListButton.onclick = () => {
+        window.location.href = '/';
+    };
 
     // Fetch rooms from server
     fetch('/rooms')
@@ -9,8 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 비공개 방을 제외한 방의 수를 계산
             const visibleRooms = rooms.filter(room => !room.is_private);
-            console.log("Visible rooms (excluding private):", visibleRooms); // 비공개 방 제외 후 데이터 확인
-            
+
             const roomCount = document.getElementById('roomCount');
             roomCount.textContent = `(${rooms.length})`;  // 전체 방의 수를 카운트
 
@@ -45,6 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         })
         .catch(error => {
-            console.error("Error fetching rooms:", error); // 에러 발생 시 로그 출력
+            console.error("Error fetching rooms:", error);
         });
 });

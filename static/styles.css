@@ -51,7 +51,7 @@ h1 {
     color: #666;
 }
 
-#leaveRoomButton {
+#leaveRoomButton, #leaveRoomListButton {
     position: absolute;
     left: 10px;
     border: none;
