@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await start();
     await setupWebSocket();
     await call();
+    chatInput.focus(); // 포커스를 텍스트 입력창으로 옮기기
 });
 
 leaveRoomButton.onclick = leaveRoom;
