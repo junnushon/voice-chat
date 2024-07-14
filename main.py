@@ -176,6 +176,11 @@ async def room_page():
     with open("static/room.html", "r") as f:
         return f.read()
 
+@app.get("/room_list.html", response_class=HTMLResponse)
+async def room_list_page():
+    with open("static/room_list.html", "r") as f:
+        return f.read()
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

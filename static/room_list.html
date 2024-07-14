@@ -3,22 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Voice Chat</title>
+    <title>Room List</title>
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-
-        <h1>Voice Chat</h1>
-        <span id="roomCount" class="user-count">(0)</span>
+            <h1>Room List</h1>
+            <span id="roomCount" class="user-count">(0)</span>
         </div>
-        <div id="roomList">
-            <button id="createRoomButton">Create Room</button>
-            <button id="roomListButton">View Rooms</button>
-        </div>
+        <ul id="rooms"></ul>
     </div>
-    <script src="/static/index.js"></script>
+    <script src="/static/room_list.js"></script>
 </body>
 </html>
