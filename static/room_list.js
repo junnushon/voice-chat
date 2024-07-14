@@ -1,10 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     const roomList = document.getElementById('rooms');
-    const leaveRoomListButton = document.getElementById('leaveRoomListButton');
+    // const leaveRoomListButton = document.getElementById('leaveRoomListButton');
 
-    leaveRoomListButton.onclick = () => {
-        window.location.href = '/';
-    };
+    // leaveRoomListButton.onclick = () => {
+    //     window.location.href = '/';
+    // };
 
     // Fetch rooms from server
     fetch('/rooms')
