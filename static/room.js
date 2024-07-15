@@ -89,10 +89,8 @@ async function setupWebSocket() {
                 console.error('Invalid JSON:', message);
                 return;
             }
-            console.log('Received message:', data);
 
             if (data.type === 'user_count') {
-                console.log(`Updating user count to ${data.user_count}`);
                 if (userCountDiv) {
                     userCountDiv.textContent = `(${data.user_count})`;
                 }
@@ -104,7 +102,6 @@ async function setupWebSocket() {
             } else if (data.from && data.candidate) {
                 try {
                     await pcs[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
-                    console.log('Added ICE candidate:', data.candidate);
                 } catch (e) {
                     console.error('Error adding received ICE candidate', e);
                 }
@@ -126,8 +123,6 @@ async function setupWebSocket() {
 }
 
 async function start() {
-    console.log('Starting local stream...');
-
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: {
@@ -137,32 +132,25 @@ async function start() {
             }
         });
         localStream = stream;
-        console.log('Local stream started:', stream);
     } catch (e) {
         console.error('Error accessing media devices:', e);
     }
 }
 
 async function call() {
-    console.log('Starting call...');
-
     initializePeerConnection(nickname);
 
     localStream.getTracks().forEach(track => {
         for (let peerId in pcs) {
             pcs[peerId].addTrack(track, localStream);
-            console.log('Added local track:', track);
         }
     });
 
     for (let peerId in pcs) {
         try {
             const offer = await pcs[peerId].createOffer();
-            console.log('Created offer:', offer);
             await pcs[peerId].setLocalDescription(offer);
-            console.log('Set local description:', pcs[peerId].localDescription);
             ws.send(JSON.stringify({ from: nickname, to: peerId, sdp: pcs[peerId].localDescription }));
-            console.log('Sent offer SDP:', pcs[peerId].localDescription);
         } catch (e) {
             console.error('Failed to create offer:', e);
         }
@@ -171,7 +159,6 @@ async function call() {
 
 function initializePeerConnection(peerId) {
     if (pcs[peerId]) {
-        console.log(`PeerConnection for ${peerId} already exists`);
         return;
     }
 
@@ -183,22 +170,19 @@ function initializePeerConnection(peerId) {
 
     pcs[peerId].onicecandidate = e => {
         if (e.candidate) {
-            console.log('Generated ICE candidate:', e.candidate);
             ws.send(JSON.stringify({ from: nickname, to: peerId, candidate: e.candidate }));
         }
     };
 
     pcs[peerId].oniceconnectionstatechange = e => {
-        console.log('ICE connection state change:', pcs[peerId].iceConnectionState);
-    };
-
-    pcs[peerId].onconnectionstatechange = e => {
-        console.log('Peer connection state change:', pcs[peerId].connectionState);
+        if (pcs[peerId].iceConnectionState === 'disconnected') {
+            pcs[peerId].close();
+            delete pcs[peerId];
+        }
     };
 
     pcs[peerId].ontrack = event => {
         if (event.streams && event.streams[0]) {
-            console.log('Received remote stream:', event.streams[0]);
             remoteAudio.srcObject = event.streams[0];
         }
     };
@@ -207,16 +191,13 @@ function initializePeerConnection(peerId) {
 async function handleRemoteDescription(peerId, sdp) {
     try {
         if (sdp.type === 'offer' && pcs[peerId].signalingState !== 'stable') {
-            console.warn(`Skipping setRemoteDescription because signalingState is ${pcs[peerId].signalingState}`);
             return;
         }
         await pcs[peerId].setRemoteDescription(new RTCSessionDescription(sdp));
         if (sdp.type === 'offer') {
             const answer = await pcs[peerId].createAnswer();
-            console.log('Created answer:', answer);
             await pcs[peerId].setLocalDescription(answer);
             ws.send(JSON.stringify({ from: nickname, to: peerId, sdp: pcs[peerId].localDescription }));
-            console.log('Sent answer SDP:', pcs[peerId].localDescription);
         }
     } catch (e) {
         console.error('Error setting remote description:', e);
@@ -228,7 +209,6 @@ function hangup() {
         if (pcs[peerId]) {
             pcs[peerId].close();
             pcs[peerId] = null;
-            console.log('Peer connection closed for peer:', peerId);
         }
     }
 }
