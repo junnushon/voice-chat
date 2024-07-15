@@ -100,14 +100,7 @@ async function setupWebSocket() {
                 if (!pcs[data.from]) {
                     initializePeerConnection(data.from);
                 }
-                await pcs[data.from].setRemoteDescription(new RTCSessionDescription(data.sdp));
-                if (data.sdp.type === 'offer') {
-                    const answer = await pcs[data.from].createAnswer();
-                    console.log('Created answer:', answer);
-                    await pcs[data.from].setLocalDescription(answer);
-                    ws.send(JSON.stringify({ from: nickname, to: data.from, sdp: pcs[data.from].localDescription }));
-                    console.log('Sent answer SDP:', pcs[data.from].localDescription);
-                }
+                await handleRemoteDescription(data.from, data.sdp);
             } else if (data.from && data.candidate) {
                 try {
                     await pcs[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
@@ -204,6 +197,21 @@ function initializePeerConnection(peerId) {
             remoteAudio.srcObject = event.streams[0];
         }
     };
+}
+
+async function handleRemoteDescription(peerId, sdp) {
+    try {
+        await pcs[peerId].setRemoteDescription(new RTCSessionDescription(sdp));
+        if (sdp.type === 'offer') {
+            const answer = await pcs[peerId].createAnswer();
+            console.log('Created answer:', answer);
+            await pcs[peerId].setLocalDescription(answer);
+            ws.send(JSON.stringify({ from: nickname, to: peerId, sdp: pcs[peerId].localDescription }));
+            console.log('Sent answer SDP:', pcs[peerId].localDescription);
+        }
+    } catch (e) {
+        console.error('Error setting remote description:', e);
+    }
 }
 
 function hangup() {
