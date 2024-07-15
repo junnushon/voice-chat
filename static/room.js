@@ -170,6 +170,11 @@ async function call() {
 }
 
 function initializePeerConnection(peerId) {
+    if (pcs[peerId]) {
+        console.log(`PeerConnection for ${peerId} already exists`);
+        return;
+    }
+
     pcs[peerId] = new RTCPeerConnection({
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
@@ -201,6 +206,10 @@ function initializePeerConnection(peerId) {
 
 async function handleRemoteDescription(peerId, sdp) {
     try {
+        if (sdp.type === 'offer' && pcs[peerId].signalingState !== 'stable') {
+            console.warn(`Skipping setRemoteDescription because signalingState is ${pcs[peerId].signalingState}`);
+            return;
+        }
         await pcs[peerId].setRemoteDescription(new RTCSessionDescription(sdp));
         if (sdp.type === 'offer') {
             const answer = await pcs[peerId].createAnswer();
