@@ -107,7 +107,7 @@ function setPreferredCodec(sdp, codec) {
 
 async function setupWebSocket() {
     return new Promise((resolve, reject) => {
-        let wsUrl = `ws://localhost:8000/ws?room=${roomId}`;
+        let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}`;
         if (roomPassword) {
             wsUrl += `&password=${roomPassword}`;
         }
