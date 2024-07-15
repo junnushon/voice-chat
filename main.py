@@ -31,7 +31,6 @@ def generate_room_hash(room_name):
     hash_object.update((room_name + str(time.time())).encode('utf-8'))
     return hash_object.hexdigest()[:8]  # 앞의 8자리만 사용
 
-
 class Room(BaseModel):
     name: str
     password: str = None
@@ -76,7 +75,11 @@ class ConnectionManager:
     async def broadcast(self, message: str, sender: WebSocket, room: str):
         for connection in self.rooms.get(room, []):
             if connection != sender:
-                await connection.send_text(message)
+                try:
+                    await connection.send_text(message)
+                except Exception as e:
+                    print(f'Error sending message: {e}')
+                    await connection.close()
 
     def get_room_info(self):
         return [
@@ -103,7 +106,8 @@ class ConnectionManager:
         if room in self.rooms and not self.rooms[room]:
             del self.rooms[room]
             del self.room_details[room]
-            del self.room_timers[room]
+            if room in self.room_timers:
+                del self.room_timers[room]
             print(f'Room {room} deleted due to inactivity')
 
 manager = ConnectionManager()
@@ -125,6 +129,8 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), passw
                 print("Received message is not a valid JSON")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+    except Exception as e:
+        print(f'Error handling WebSocket connection: {e}')
 
 @app.get("/rooms")
 async def get_rooms():
@@ -148,7 +154,6 @@ async def create_room(room: Room):
         "is_private": room.is_private
     }
     return {"id": room_id, "name": room.name, "is_private": room.is_private}
-
 
 @app.post("/check_password")
 async def check_password(payload: PasswordCheckRequest):

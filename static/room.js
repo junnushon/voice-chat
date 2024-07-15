@@ -27,11 +27,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/';
         return;
     }
-    nicknameDisplay.textContent = nickname; // 닉네임 표시 추가
+    nicknameDisplay.textContent = nickname;
     await start();
     await setupWebSocket();
     await call();
-    chatInput.focus(); // 포커스를 텍스트 입력창으로 옮기기
+    chatInput.focus();
 });
 
 leaveRoomButton.onclick = leaveRoom;
@@ -82,7 +82,13 @@ async function setupWebSocket() {
 
         ws.onmessage = async (event) => {
             const message = event.data;
-            const data = JSON.parse(message);
+            let data;
+            try {
+                data = JSON.parse(message);
+            } catch (e) {
+                console.error('Invalid JSON:', message);
+                return;
+            }
             console.log('Received message:', data);
 
             if (data.type === 'user_count') {
@@ -99,7 +105,7 @@ async function setupWebSocket() {
                     const answer = await pcs[data.from].createAnswer();
                     console.log('Created answer:', answer);
                     await pcs[data.from].setLocalDescription(answer);
-                    ws.send(JSON.stringify({ from: 'your-id', to: data.from, sdp: pcs[data.from].localDescription }));
+                    ws.send(JSON.stringify({ from: nickname, to: data.from, sdp: pcs[data.from].localDescription }));
                     console.log('Sent answer SDP:', pcs[data.from].localDescription);
                 }
             } else if (data.from && data.candidate) {
@@ -147,7 +153,7 @@ async function start() {
 async function call() {
     console.log('Starting call...');
 
-    initializePeerConnection('your-id');
+    initializePeerConnection(nickname);
 
     localStream.getTracks().forEach(track => {
         for (let peerId in pcs) {
@@ -162,7 +168,7 @@ async function call() {
             console.log('Created offer:', offer);
             await pcs[peerId].setLocalDescription(offer);
             console.log('Set local description:', pcs[peerId].localDescription);
-            ws.send(JSON.stringify({ from: 'your-id', to: peerId, sdp: pcs[peerId].localDescription }));
+            ws.send(JSON.stringify({ from: nickname, to: peerId, sdp: pcs[peerId].localDescription }));
             console.log('Sent offer SDP:', pcs[peerId].localDescription);
         } catch (e) {
             console.error('Failed to create offer:', e);
@@ -180,7 +186,7 @@ function initializePeerConnection(peerId) {
     pcs[peerId].onicecandidate = e => {
         if (e.candidate) {
             console.log('Generated ICE candidate:', e.candidate);
-            ws.send(JSON.stringify({ from: 'your-id', to: peerId, candidate: e.candidate }));
+            ws.send(JSON.stringify({ from: nickname, to: peerId, candidate: e.candidate }));
         }
     };
 
