@@ -21,7 +21,6 @@ let nickname = '';
 let clientId = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM fully loaded and parsed');
     await fetchRoomTitle();
     nickname = prompt("Enter your nickname:");
     if (!nickname) {
@@ -31,7 +30,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     nicknameDisplay.textContent = nickname;
     await start();
+    console.log('111111');
     await setupWebSocket();
+    console.log('222222');
     await call();
     chatInput.focus();
 });
