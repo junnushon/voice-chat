@@ -2,7 +2,6 @@ import asyncio
 import json
 import hashlib
 import time
-import uuid
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +31,7 @@ def generate_room_hash(room_name):
     hash_object.update((room_name + str(time.time())).encode('utf-8'))
     return hash_object.hexdigest()[:8]  # 앞의 8자리만 사용
 
+
 class Room(BaseModel):
     name: str
     password: str = None
@@ -43,51 +43,40 @@ class PasswordCheckRequest(BaseModel):
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
-        self.rooms: Dict[str, List[str]] = {}  # Dict로 변경
+        self.active_connections: List[WebSocket] = []
+        self.rooms: Dict[str, List[WebSocket]] = {}  # Dict로 변경
         self.room_details: Dict[str, Dict] = {}
         self.room_timers: Dict[str, asyncio.TimerHandle] = {}
 
     async def connect(self, websocket: WebSocket, room: str, password: str = None):
         await websocket.accept()
-        client_id = str(uuid.uuid4())
-        self.active_connections[client_id] = websocket
         if room not in self.rooms:
             await websocket.close(code=1000, reason="Room does not exist")
-            return client_id
+            return
         room_password = self.room_details[room].get('password')
         if room_password and room_password != password:
             await websocket.close(code=4001, reason="Invalid password")
-            return client_id
-        self.rooms[room].append(client_id)
+            return
+        self.rooms[room].append(websocket)
+        self.active_connections.append(websocket)
         if room in self.room_timers:
             self.room_timers[room].cancel()
             del self.room_timers[room]
         asyncio.create_task(self.send_user_count(room))
-        await websocket.send_json({"type": "id", "id": client_id})
-        return client_id
 
-    def disconnect(self, client_id: str):
-        websocket = self.active_connections.pop(client_id, None)
-        if websocket:
-            for room, clients in self.rooms.items():
-                if client_id in clients:
-                    clients.remove(client_id)
-                    if not clients:
-                        self.room_timers[room] = asyncio.get_event_loop().call_later(300, self.delete_room, room)
-                    asyncio.create_task(self.send_user_count(room))
-                    break
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        for room in self.rooms:
+            if websocket in self.rooms[room]:
+                self.rooms[room].remove(websocket)
+                if not self.rooms[room]:
+                    self.room_timers[room] = asyncio.get_event_loop().call_later(300, self.delete_room, room)
+                asyncio.create_task(self.send_user_count(room))
 
-    async def broadcast(self, message: str, sender_id: str, room: str):
-        for client_id in self.rooms.get(room, []):
-            if client_id != sender_id:
-                connection = self.active_connections.get(client_id)
-                if connection:
-                    try:
-                        await connection.send_text(message)
-                    except Exception as e:
-                        print(f'Error sending message: {e}')
-                        await connection.close()
+    async def broadcast(self, message: str, sender: WebSocket, room: str):
+        for connection in self.rooms.get(room, []):
+            if connection != sender:
+                await connection.send_text(message)
 
     def get_room_info(self):
         return [
@@ -103,28 +92,25 @@ class ConnectionManager:
     async def send_user_count(self, room: str):
         while room in self.rooms:
             user_count = len(self.rooms[room])
-            for client_id in self.rooms[room]:
-                connection = self.active_connections.get(client_id)
-                if connection:
-                    try:
-                        await connection.send_json({"type": "user_count", "user_count": user_count})
-                    except Exception as e:
-                        print(f'Error sending user count: {e}')
+            for connection in self.rooms[room]:
+                try:
+                    await connection.send_json({"type": "user_count", "user_count": user_count})
+                except Exception as e:
+                    print(f'Error sending user count: {e}')
             await asyncio.sleep(5)
 
     def delete_room(self, room: str):
         if room in self.rooms and not self.rooms[room]:
             del self.rooms[room]
             del self.room_details[room]
-            if room in self.room_timers:
-                del self.room_timers[room]
+            del self.room_timers[room]
             print(f'Room {room} deleted due to inactivity')
 
 manager = ConnectionManager()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), password: str = Query(None)):
-    client_id = await manager.connect(websocket, room, password)
+    await manager.connect(websocket, room, password)
     try:
         while True:
             data = await websocket.receive_text()
@@ -132,15 +118,13 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), passw
                 data_json = json.loads(data)
                 message_type = data_json.get("type")
                 if message_type == "chat":
-                    await manager.broadcast(json.dumps(data_json), client_id, room)
+                    await manager.broadcast(json.dumps(data_json), websocket, room)
                 else:
-                    await manager.broadcast(data, client_id, room)
+                    await manager.broadcast(data, websocket, room)
             except json.JSONDecodeError:
                 print("Received message is not a valid JSON")
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
-    except Exception as e:
-        print(f'Error handling WebSocket connection: {e}')
+        manager.disconnect(websocket)
 
 @app.get("/rooms")
 async def get_rooms():
@@ -164,6 +148,7 @@ async def create_room(room: Room):
         "is_private": room.is_private
     }
     return {"id": room_id, "name": room.name, "is_private": room.is_private}
+
 
 @app.post("/check_password")
 async def check_password(payload: PasswordCheckRequest):
