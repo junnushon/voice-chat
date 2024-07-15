@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     nicknameDisplay.textContent = nickname;
     await start();
     await setupWebSocket();
+    await call();
     chatInput.focus();
 });
 
