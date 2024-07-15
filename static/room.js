@@ -60,6 +60,51 @@ async function fetchRoomTitle() {
     }
 }
 
+function setPreferredCodec(sdp, codec) {
+    const sdpLines = sdp.split('\r\n');
+    let mLineIndex = -1;
+
+    for (let i = 0; i < sdpLines.length; i++) {
+        if (sdpLines[i].startsWith('m=audio')) {
+            mLineIndex = i;
+            break;
+        }
+    }
+
+    if (mLineIndex === -1) {
+        return sdp; // No m=audio line found
+    }
+
+    const codecRegex = new RegExp(`a=rtpmap:(\\d+) ${codec}`);
+    let codecPayloadType = null;
+    for (let i = 0; i < sdpLines.length; i++) {
+        const match = sdpLines[i].match(codecRegex);
+        if (match) {
+            codecPayloadType = match[1];
+            break;
+        }
+    }
+
+    if (codecPayloadType === null) {
+        return sdp; // No matching codec found
+    }
+
+    const mLineElements = sdpLines[mLineIndex].split(' ');
+    const newMLine = [];
+    for (let i = 0; i < mLineElements.length; i++) {
+        if (i === 3) {
+            newMLine.push(codecPayloadType); // Add preferred codec first
+        }
+        if (mLineElements[i] !== codecPayloadType) {
+            newMLine.push(mLineElements[i]);
+        }
+    }
+
+    sdpLines[mLineIndex] = newMLine.join(' ');
+    return sdpLines.join('\r\n');
+}
+
+
 async function setupWebSocket() {
     return new Promise((resolve, reject) => {
         let wsUrl = `ws://localhost:8000/ws?room=${roomId}`;
@@ -149,12 +194,17 @@ async function call() {
 
     initializePeerConnection('your-id');
 
-    localStream.getTracks().forEach(track => {
-        for (let peerId in pcs) {
-            pcs[peerId].addTrack(track, localStream);
-            console.log('Added local track:', track);
-        }
-    });
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            for (let peerId in pcs) {
+                let senderExists = pcs[peerId].getSenders().some(sender => sender.track === track);
+                if (!senderExists) {
+                    pcs[peerId].addTrack(track, localStream);
+                    console.log('Added local track:', track);
+                }
+            }
+        });
+    }
 
     for (let peerId in pcs) {
         try {
@@ -186,10 +236,20 @@ function initializePeerConnection(peerId) {
 
     pcs[peerId].oniceconnectionstatechange = e => {
         console.log('ICE connection state change:', pcs[peerId].iceConnectionState);
+        if (pcs[peerId].iceConnectionState === 'disconnected' || pcs[peerId].iceConnectionState === 'failed') {
+            pcs[peerId].close();
+            delete pcs[peerId];
+            console.log(`Peer connection with ${peerId} closed.`);
+        }
     };
 
     pcs[peerId].onconnectionstatechange = e => {
         console.log('Peer connection state change:', pcs[peerId].connectionState);
+        if (pcs[peerId].connectionState === 'disconnected' || pcs[peerId].connectionState === 'failed') {
+            pcs[peerId].close();
+            delete pcs[peerId];
+            console.log(`Peer connection with ${peerId} closed.`);
+        }
     };
 
     pcs[peerId].ontrack = event => {
@@ -198,7 +258,18 @@ function initializePeerConnection(peerId) {
             remoteAudio.srcObject = event.streams[0];
         }
     };
+
+    // Add local tracks to the peer connection
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            let senderExists = pcs[peerId].getSenders().some(sender => sender.track === track);
+            if (!senderExists) {
+                pcs[peerId].addTrack(track, localStream);
+            }
+        });
+    }
 }
+
 
 function hangup() {
     for (let peerId in pcs) {

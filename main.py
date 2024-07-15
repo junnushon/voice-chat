@@ -43,9 +43,8 @@ class PasswordCheckRequest(BaseModel):
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
-        self.rooms: Dict[str, List[WebSocket]] = {}  # Dict로 변경
-        self.room_details: Dict[str, Dict] = {}
+        self.active_connections: Dict[str, List[WebSocket]] = {}  # Dict로 변경
+        self.rooms: Dict[str, Dict] = {}
         self.room_timers: Dict[str, asyncio.TimerHandle] = {}
 
     async def connect(self, websocket: WebSocket, room: str, password: str = None):
@@ -53,28 +52,26 @@ class ConnectionManager:
         if room not in self.rooms:
             await websocket.close(code=1000, reason="Room does not exist")
             return
-        room_password = self.room_details[room].get('password')
+        room_password = self.rooms[room].get('password')
         if room_password and room_password != password:
             await websocket.close(code=4001, reason="Invalid password")
             return
-        self.rooms[room].append(websocket)
-        self.active_connections.append(websocket)
+        if room not in self.active_connections:
+            self.active_connections[room] = []
+        self.active_connections[room].append(websocket)
         if room in self.room_timers:
             self.room_timers[room].cancel()
             del self.room_timers[room]
         asyncio.create_task(self.send_user_count(room))
 
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-        for room in self.rooms:
-            if websocket in self.rooms[room]:
-                self.rooms[room].remove(websocket)
-                if not self.rooms[room]:
-                    self.room_timers[room] = asyncio.get_event_loop().call_later(300, self.delete_room, room)
-                asyncio.create_task(self.send_user_count(room))
+    def disconnect(self, websocket: WebSocket, room: str):
+        self.active_connections[room].remove(websocket)
+        if not self.active_connections[room]:
+            self.room_timers[room] = asyncio.get_event_loop().call_later(300, self.delete_room, room)
+        asyncio.create_task(self.send_user_count(room))
 
     async def broadcast(self, message: str, sender: WebSocket, room: str):
-        for connection in self.rooms.get(room, []):
+        for connection in self.active_connections.get(room, []):
             if connection != sender:
                 await connection.send_text(message)
 
@@ -82,17 +79,17 @@ class ConnectionManager:
         return [
             {
                 "id": room_id,
-                "name": self.room_details[room_id]['name'],
-                "has_password": bool(self.room_details[room_id].get('password')),
-                "is_private": self.room_details[room_id].get('is_private', False),
-                "user_count": len(self.rooms.get(room_id, []))
+                "name": self.rooms[room_id]['name'],
+                "has_password": bool(self.rooms[room_id].get('password')),
+                "is_private": self.rooms[room_id].get('is_private', False),
+                "user_count": len(self.active_connections.get(room_id, []))
             } for room_id in self.rooms
         ]
 
     async def send_user_count(self, room: str):
-        while room in self.rooms:
-            user_count = len(self.rooms[room])
-            for connection in self.rooms[room]:
+        while room in self.active_connections:
+            user_count = len(self.active_connections[room])
+            for connection in self.active_connections[room]:
                 try:
                     await connection.send_json({"type": "user_count", "user_count": user_count})
                 except Exception as e:
@@ -100,9 +97,9 @@ class ConnectionManager:
             await asyncio.sleep(5)
 
     def delete_room(self, room: str):
-        if room in self.rooms and not self.rooms[room]:
+        if room in self.active_connections and not self.active_connections[room]:
+            del self.active_connections[room]
             del self.rooms[room]
-            del self.room_details[room]
             del self.room_timers[room]
             print(f'Room {room} deleted due to inactivity')
 
@@ -124,7 +121,7 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), passw
             except json.JSONDecodeError:
                 print("Received message is not a valid JSON")
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        manager.disconnect(websocket, room)
 
 @app.get("/rooms")
 async def get_rooms():
@@ -133,7 +130,7 @@ async def get_rooms():
 @app.post("/rooms")
 async def create_room(room: Room):
     # Check for duplicate room names
-    if any(details["name"] == room.name for details in manager.room_details.values()):
+    if any(details["name"] == room.name for details in manager.rooms.values()):
         raise HTTPException(status_code=400, detail="Room name already exists")
     
     if room.is_private:
@@ -141,18 +138,17 @@ async def create_room(room: Room):
     else:
         room_id = str(len(manager.rooms) + 1)
         
-    manager.rooms[room_id] = []
-    manager.room_details[room_id] = {
+    manager.rooms[room_id] = {
         "name": room.name,
         "password": room.password,
         "is_private": room.is_private
     }
+    manager.active_connections[room_id] = []
     return {"id": room_id, "name": room.name, "is_private": room.is_private}
-
 
 @app.post("/check_password")
 async def check_password(payload: PasswordCheckRequest):
-    room = manager.room_details.get(payload.room_id)
+    room = manager.rooms.get(payload.room_id)
     if room is None:
         return JSONResponse(content={"detail": "Room does not exist"}, status_code=404)
     if room['password'] != payload.password:
