@@ -18,6 +18,7 @@ let localStream;
 let pcs = {};
 let ws;
 let nickname = '';
+let clientId = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM fully loaded and parsed');
@@ -38,35 +39,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 leaveRoomButton.onclick = leaveRoom;
 sendButton.onclick = sendMessage;
 chatInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-        sendMessage();
-    }
+    if (event.key === 'Enter') sendMessage();
 });
 
 copyLinkButton.onclick = () => {
     const roomUrl = `${window.location.origin}/room.html?room=${roomId}`;
-    navigator.clipboard.writeText(roomUrl).then(() => {
-        alert('Room link copied to clipboard!');
-    }).catch(err => {
-        alert('Failed to copy the link.');
-    });
+    navigator.clipboard.writeText(roomUrl).then(() => alert('Room link copied to clipboard!')).catch(err => alert('Failed to copy the link.'));
 };
 
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
     const rooms = await response.json();
     const room = rooms.find(r => r.id === roomId);
-    if (room) {
-        roomTitle.textContent = room.name;
-    }
+    if (room) roomTitle.textContent = room.name;
 }
 
 async function setupWebSocket() {
     return new Promise((resolve, reject) => {
         let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}`;
-        if (roomPassword) {
-            wsUrl += `&password=${roomPassword}`;
-        }
+        if (roomPassword) wsUrl += `&password=${roomPassword}`;
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
@@ -90,17 +81,15 @@ async function setupWebSocket() {
                 console.error('Invalid JSON:', message);
                 return;
             }
-
-            if (data.type === 'user_count') {
+            if (data.type === 'id') {
+                clientId = data.id;
+                console.log(`Received client ID: ${clientId}`);
+            } else if (data.type === 'user_count') {
                 console.log(`Updating user count to ${data.user_count}`);
-                if (userCountDiv) {
-                    userCountDiv.textContent = `(${data.user_count})`;
-                }
+                if (userCountDiv) userCountDiv.textContent = `(${data.user_count})`;
             } else if (data.from && data.sdp) {
                 console.log(`Received SDP from ${data.from}`, data.sdp);
-                if (!pcs[data.from]) {
-                    initializePeerConnection(data.from);
-                }
+                if (!pcs[data.from]) initializePeerConnection(data.from);
                 await handleRemoteDescription(data.from, data.sdp);
             } else if (data.from && data.candidate) {
                 console.log(`Received ICE candidate from ${data.from}`, data.candidate);
@@ -147,7 +136,7 @@ async function start() {
 
 async function call() {
     console.log('Starting call...');
-    initializePeerConnection(nickname);
+    initializePeerConnection(clientId);
 
     localStream.getTracks().forEach(track => {
         for (let peerId in pcs) {
@@ -160,7 +149,7 @@ async function call() {
         try {
             const offer = await pcs[peerId].createOffer();
             await pcs[peerId].setLocalDescription(offer);
-            ws.send(JSON.stringify({ from: nickname, to: peerId, sdp: pcs[peerId].localDescription }));
+            ws.send(JSON.stringify({ from: clientId, to: peerId, sdp: pcs[peerId].localDescription }));
             console.log(`Sent offer SDP to ${peerId}:`, pcs[peerId].localDescription);
         } catch (e) {
             console.error(`Failed to create offer for ${peerId}:`, e);
@@ -184,7 +173,7 @@ function initializePeerConnection(peerId) {
     pcs[peerId].onicecandidate = e => {
         if (e.candidate) {
             console.log(`Generated ICE candidate for ${peerId}:`, e.candidate);
-            ws.send(JSON.stringify({ from: nickname, to: peerId, candidate: e.candidate }));
+            ws.send(JSON.stringify({ from: clientId, to: peerId, candidate: e.candidate }));
         }
     };
 
@@ -217,7 +206,7 @@ async function handleRemoteDescription(peerId, sdp) {
         if (sdp.type === 'offer') {
             const answer = await pcs[peerId].createAnswer();
             await pcs[peerId].setLocalDescription(answer);
-            ws.send(JSON.stringify({ from: nickname, to: peerId, sdp: pcs[peerId].localDescription }));
+            ws.send(JSON.stringify({ from: clientId, to: peerId, sdp: pcs[peerId].localDescription }));
             console.log(`Sent answer SDP to ${peerId}:`, pcs[peerId].localDescription);
         }
     } catch (e) {
