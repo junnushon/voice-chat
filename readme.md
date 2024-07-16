@@ -5,6 +5,13 @@
 ![GitHub stars](https://img.shields.io/github/stars/junnushon/voice-chat)
 ![GitHub license](https://img.shields.io/github/license/junnushon/voice-chat)
 
+
+## Update
+- 2024-07-16 When more than three users are connected, the connection gets dropped.
+- 2024-07-16 현재 3명 이상 접속시 연결이 끊어지는 문제가 있습니다. 
+
+---
+
 This is a web-based voice chat application built using FastAPI and WebSockets. Users can create rooms, join existing rooms, and communicate with each other in real-time. The application ensures that rooms are deleted if they are inactive (i.e., have zero users) for more than 5 minutes. Additionally, room names must be unique.
 
 ---
