@@ -14,8 +14,8 @@ This is a web-based voice chat application built using FastAPI and WebSockets. U
 FastAPI와 WebSockets를 사용하여 구축된 웹 기반 음성 채팅 애플리케이션입니다. 사용자는 방을 생성하고, 기존 방에 참여하며, 실시간으로 서로 소통할 수 있습니다. 이 애플리케이션은 방이 비활성 상태(즉, 사용자가 0명인 상태)가 5분 이상 지속되면 해당 방을 자동으로 삭제합니다. 또한, 방 이름은 중복되지 않도록 보장합니다.
 
 ## Update
-- 2024-07-16 When more than three users are connected, the connection gets dropped.
-- 현재 3명 이상 접속시 연결이 끊어지는 문제가 있습니다. 
+- 2024-07-16 When more than three users are connected, the connection gets dropped. ==> fixed.
+- 현재 3명 이상 접속시 연결이 끊어지는 문제가 있습니다. ==> 수정완료.
 
 ## Live Site / 라이브 사이트
 
