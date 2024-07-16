@@ -20,6 +20,8 @@ let ws;
 let nickname = '';
 let userId = uuidv4();
 let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
+let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
+let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -65,6 +67,77 @@ copyLinkButton.onclick = () => {
     });
 };
 
+async function handleIceCandidate(peerId, candidate) {
+    const candidateId = `${candidate.sdpMid}:${candidate.sdpMLineIndex}:${candidate.candidate}`;
+    if (!addedIceCandidates[peerId]) {
+        addedIceCandidates[peerId] = new Set();
+    }
+
+    if (addedIceCandidates[peerId].has(candidateId)) {
+        console.log(`Duplicate ICE candidate for peer ${peerId} ignored: ${candidateId}`);
+        return;
+    }
+
+    addedIceCandidates[peerId].add(candidateId);
+
+    if (pcs[peerId] && pcs[peerId].remoteDescription && pcs[peerId].remoteDescription.type) {
+        try {
+            await pcs[peerId].addIceCandidate(new RTCIceCandidate(candidate));
+            console.log(`Added ICE candidate for peer ${peerId}`);
+        } catch (e) {
+            console.error(`Error adding ICE candidate for peer ${peerId}`, e);
+        }
+    } else {
+        if (!pendingIceCandidates[peerId]) {
+            pendingIceCandidates[peerId] = [];
+        }
+        pendingIceCandidates[peerId].push(candidate);
+        console.log(`Queued ICE candidate for peer ${peerId}`);
+    }
+}
+
+async function handleRemoteDescription(peerId, sdp) {
+    if (!pcs[peerId]) {
+        initializePeerConnection(peerId);
+    }
+
+    const rtcSessionDescription = new RTCSessionDescription(sdp);
+    const currentState = pcs[peerId].signalingState;
+    console.log(`Current signaling state for peer ${peerId}:`, currentState);
+    
+    try {
+        if (rtcSessionDescription.type === 'offer' && currentState === 'stable') {
+            await pcs[peerId].setRemoteDescription(rtcSessionDescription);
+            console.log(`Remote description (offer) set for peer ${peerId}`);
+            
+            const answer = await pcs[peerId].createAnswer();
+            await pcs[peerId].setLocalDescription(answer);
+            console.log('Created and sent Answer:', answer);
+            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+        } else if (rtcSessionDescription.type === 'answer' && currentState === 'have-local-offer') {
+            await pcs[peerId].setRemoteDescription(rtcSessionDescription);
+            console.log(`Remote description (answer) set for peer ${peerId}`);
+        } else {
+            console.log(`Unexpected SDP type or state: ${rtcSessionDescription.type}, ${currentState}`);
+        }
+
+        if (pendingIceCandidates[peerId]) {
+            for (let candidate of pendingIceCandidates[peerId]) {
+                try {
+                    await pcs[peerId].addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log(`Added pending ICE candidate for peer ${peerId}`);
+                } catch (e) {
+                    console.error(`Error adding pending ICE candidate for peer ${peerId}`, e);
+                }
+            }
+            delete pendingIceCandidates[peerId];
+        }
+    } catch (e) {
+        console.error(`Error setting remote description for peer ${peerId}`, e);
+    }
+}
+
+
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
     const rooms = await response.json();
@@ -76,7 +149,7 @@ async function fetchRoomTitle() {
 
 async function setupWebSocket() {
     return new Promise((resolve, reject) => {
-        let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}&user_id=${userId}`;
+        let wsUrl = `ws://localhost:8000/ws?room=${roomId}&user_id=${userId}`;
         if (roomPassword) {
             wsUrl += `&password=${roomPassword}`;
         }
@@ -98,43 +171,28 @@ async function setupWebSocket() {
             const message = event.data;
             const data = JSON.parse(message);
             console.log('Received message:', data);
-
+        
             if (data.from && data.to && data.from === data.to) {
                 console.log('Ignoring message from self');
-                return; // 자신에게서 온 메시지는 무시
+                return;
             }
-
+        
             if (data.type === 'user_count') {
                 console.log(`Updating user count to ${data.user_count}`);
                 if (userCountDiv) {
                     userCountDiv.textContent = `${data.user_count}`;
                 }
             } else if (data.from && data.sdp) {
-                if (!pcs[data.from]) {
-                    initializePeerConnection(data.from);
-                }
-                await pcs[data.from].setRemoteDescription(new RTCSessionDescription(data.sdp));
-                if (data.sdp.type === 'offer') {
-                    const answer = await pcs[data.from].createAnswer();
-                    console.log('Created answer:', answer);
-                    await pcs[data.from].setLocalDescription(answer);
-                    ws.send(JSON.stringify({ from: userId, to: data.from, sdp: pcs[data.from].localDescription }));
-                    console.log('Sent answer SDP:', pcs[data.from].localDescription);
-                }
+                await handleRemoteDescription(data.from, data.sdp);
             } else if (data.from && data.candidate) {
-                try {
-                    await pcs[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
-                    console.log('Added ICE candidate:', data.candidate);
-                } catch (e) {
-                    console.error('Error adding received ICE candidate', e);
-                }
+                await handleIceCandidate(data.from, data.candidate);
             } else if (data.type === 'chat') {
                 addChatMessage(data.message, data.nickname);
             } else if (data.type === 'new_peer') {
-                // 새로운 사용자가 방에 들어왔을 때
-                addPeer(data.peerId);
+                await addPeer(data.peerId);
             }
         };
+        
 
         ws.onclose = (event) => {
             if (event.reason === "Invalid password") {
@@ -194,13 +252,14 @@ async function call() {
 }
 
 function initializePeerConnection(peerId) {
+    console.log("initializePeerConnection called !!")
     if (pcs[peerId]) return; // 이미 초기화된 경우 무시
     pcs[peerId] = new RTCPeerConnection({
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
         ]
     });
-
+    console.log("initializePeerConnection events on !!")
     pcs[peerId].onicecandidate = e => {
         if (e.candidate) {
             console.log('Generated ICE candidate:', e.candidate);
@@ -223,6 +282,7 @@ function initializePeerConnection(peerId) {
         }
     };
 }
+
 
 // 새로운 사용자가 방에 들어올 때 호출되는 함수
 async function addPeer(peerId) {

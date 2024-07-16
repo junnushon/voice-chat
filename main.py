@@ -47,7 +47,7 @@ class RoomInfoResponse(BaseModel):
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
-        self.rooms: Dict[str, Dict[str, WebSocket]] = {}  # Dict of Dict로 변경
+        self.rooms: Dict[str, Dict[str, WebSocket]] = {}
         self.room_details: Dict[str, Dict] = {}
         self.room_timers: Dict[str, asyncio.TimerHandle] = {}
 
@@ -67,6 +67,8 @@ class ConnectionManager:
         if room in self.room_timers:
             self.room_timers[room].cancel()
             del self.room_timers[room]
+
+        # await self.broadcast_new_peer(room, user_id)
         asyncio.create_task(self.send_user_count(room))
 
     def disconnect(self, websocket: WebSocket):
@@ -88,9 +90,19 @@ class ConnectionManager:
             if connection != sender:
                 try:
                     await connection.send_text(message)
-                    print(f'Message sent to connection in room {room}')
+                    # print(f'Message sent to connection in room {room}')
                 except Exception as e:
                     print(f'Error sending message to connection in room {room}: {e}')
+
+    async def broadcast_new_peer(self, room: str, new_peer_id: str):
+        message = json.dumps({"type": "new_peer", "peerId": new_peer_id})
+        for user_id, connection in self.rooms[room].items():
+            if user_id != new_peer_id:
+                try:
+                    await connection.send_text(message)
+                    print(f'New peer message sent to connection in room {room}')
+                except Exception as e:
+                    print(f'Error sending new peer message to connection in room {room}: {e}')
 
     def get_room_info(self):
         return [
