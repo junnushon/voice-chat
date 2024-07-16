@@ -18,6 +18,9 @@ let localStream;
 let pcs = {};
 let ws;
 let nickname = '';
+let userId = uuidv4();
+let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
+console.log('userId:', userId)
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -29,10 +32,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     nicknameDisplay.textContent = nickname; // 닉네임 표시 추가
     await start();
+    await fetchRemotePeers();
     await setupWebSocket();
     await call();
     chatInput.focus(); // 포커스를 텍스트 입력창으로 옮기기
 });
+
+async function fetchRemotePeers() {
+    try {
+        const response = await fetch(`/room/${roomId}/users`);
+        const data = await response.json();
+        remotePeers = data.users.filter(id => id !== userId); // 자신을 제외한 사용자 목록
+    } catch (e) {
+        console.error('Error fetching remote peers:', e);
+    }
+}
 
 leaveRoomButton.onclick = leaveRoom;
 sendButton.onclick = sendMessage;
@@ -60,54 +74,9 @@ async function fetchRoomTitle() {
     }
 }
 
-function setPreferredCodec(sdp, codec) {
-    const sdpLines = sdp.split('\r\n');
-    let mLineIndex = -1;
-
-    for (let i = 0; i < sdpLines.length; i++) {
-        if (sdpLines[i].startsWith('m=audio')) {
-            mLineIndex = i;
-            break;
-        }
-    }
-
-    if (mLineIndex === -1) {
-        return sdp; // No m=audio line found
-    }
-
-    const codecRegex = new RegExp(`a=rtpmap:(\\d+) ${codec}`);
-    let codecPayloadType = null;
-    for (let i = 0; i < sdpLines.length; i++) {
-        const match = sdpLines[i].match(codecRegex);
-        if (match) {
-            codecPayloadType = match[1];
-            break;
-        }
-    }
-
-    if (codecPayloadType === null) {
-        return sdp; // No matching codec found
-    }
-
-    const mLineElements = sdpLines[mLineIndex].split(' ');
-    const newMLine = [];
-    for (let i = 0; i < mLineElements.length; i++) {
-        if (i === 3) {
-            newMLine.push(codecPayloadType); // Add preferred codec first
-        }
-        if (mLineElements[i] !== codecPayloadType) {
-            newMLine.push(mLineElements[i]);
-        }
-    }
-
-    sdpLines[mLineIndex] = newMLine.join(' ');
-    return sdpLines.join('\r\n');
-}
-
-
 async function setupWebSocket() {
     return new Promise((resolve, reject) => {
-        let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}`;
+        let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}&user_id=${userId}`;
         if (roomPassword) {
             wsUrl += `&password=${roomPassword}`;
         }
@@ -130,10 +99,15 @@ async function setupWebSocket() {
             const data = JSON.parse(message);
             console.log('Received message:', data);
 
+            if (data.from && data.to && data.from === data.to) {
+                console.log('Ignoring message from self');
+                return; // 자신에게서 온 메시지는 무시
+            }
+
             if (data.type === 'user_count') {
                 console.log(`Updating user count to ${data.user_count}`);
                 if (userCountDiv) {
-                    userCountDiv.textContent = `(${data.user_count})`;
+                    userCountDiv.textContent = `${data.user_count}`;
                 }
             } else if (data.from && data.sdp) {
                 if (!pcs[data.from]) {
@@ -144,7 +118,7 @@ async function setupWebSocket() {
                     const answer = await pcs[data.from].createAnswer();
                     console.log('Created answer:', answer);
                     await pcs[data.from].setLocalDescription(answer);
-                    ws.send(JSON.stringify({ from: 'your-id', to: data.from, sdp: pcs[data.from].localDescription }));
+                    ws.send(JSON.stringify({ from: userId, to: data.from, sdp: pcs[data.from].localDescription }));
                     console.log('Sent answer SDP:', pcs[data.from].localDescription);
                 }
             } else if (data.from && data.candidate) {
@@ -156,6 +130,9 @@ async function setupWebSocket() {
                 }
             } else if (data.type === 'chat') {
                 addChatMessage(data.message, data.nickname);
+            } else if (data.type === 'new_peer') {
+                // 새로운 사용자가 방에 들어왔을 때
+                addPeer(data.peerId);
             }
         };
 
@@ -192,28 +169,24 @@ async function start() {
 async function call() {
     console.log('Starting call...');
 
-    initializePeerConnection('your-id');
-
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            for (let peerId in pcs) {
-                let senderExists = pcs[peerId].getSenders().some(sender => sender.track === track);
-                if (!senderExists) {
-                    pcs[peerId].addTrack(track, localStream);
-                    console.log('Added local track:', track);
-                }
+    localStream.getTracks().forEach(track => {
+        for (let peerId of remotePeers) { // remotePeers를 사용하여 피어 연결 초기화
+            if (!pcs[peerId]) {
+                initializePeerConnection(peerId);
             }
-        });
-    }
+            pcs[peerId].addTrack(track, localStream);
+            console.log('Added local track:', track);
+        }
+    });
 
-    for (let peerId in pcs) {
+    for (let peerId of remotePeers) { // remotePeers를 사용하여 피어 연결 초기화
         try {
             const offer = await pcs[peerId].createOffer();
             console.log('Created offer:', offer);
             await pcs[peerId].setLocalDescription(offer);
             console.log('Set local description:', pcs[peerId].localDescription);
-            ws.send(JSON.stringify({ from: 'your-id', to: peerId, sdp: pcs[peerId].localDescription }));
-            console.log('Sent offer SDP:', pcs[peerId].localDescription);
+            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+            console.log('Sent offer SDP:', pcs[peerId].localDescription, peerId);
         } catch (e) {
             console.error('Failed to create offer:', e);
         }
@@ -221,6 +194,7 @@ async function call() {
 }
 
 function initializePeerConnection(peerId) {
+    if (pcs[peerId]) return; // 이미 초기화된 경우 무시
     pcs[peerId] = new RTCPeerConnection({
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
@@ -230,26 +204,16 @@ function initializePeerConnection(peerId) {
     pcs[peerId].onicecandidate = e => {
         if (e.candidate) {
             console.log('Generated ICE candidate:', e.candidate);
-            ws.send(JSON.stringify({ from: 'your-id', to: peerId, candidate: e.candidate }));
+            ws.send(JSON.stringify({ from: userId, to: peerId, candidate: e.candidate }));
         }
     };
 
     pcs[peerId].oniceconnectionstatechange = e => {
         console.log('ICE connection state change:', pcs[peerId].iceConnectionState);
-        if (pcs[peerId].iceConnectionState === 'disconnected' || pcs[peerId].iceConnectionState === 'failed') {
-            pcs[peerId].close();
-            delete pcs[peerId];
-            console.log(`Peer connection with ${peerId} closed.`);
-        }
     };
 
     pcs[peerId].onconnectionstatechange = e => {
         console.log('Peer connection state change:', pcs[peerId].connectionState);
-        if (pcs[peerId].connectionState === 'disconnected' || pcs[peerId].connectionState === 'failed') {
-            pcs[peerId].close();
-            delete pcs[peerId];
-            console.log(`Peer connection with ${peerId} closed.`);
-        }
     };
 
     pcs[peerId].ontrack = event => {
@@ -258,18 +222,32 @@ function initializePeerConnection(peerId) {
             remoteAudio.srcObject = event.streams[0];
         }
     };
-
-    // Add local tracks to the peer connection
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            let senderExists = pcs[peerId].getSenders().some(sender => sender.track === track);
-            if (!senderExists) {
-                pcs[peerId].addTrack(track, localStream);
-            }
-        });
-    }
 }
 
+// 새로운 사용자가 방에 들어올 때 호출되는 함수
+async function addPeer(peerId) {
+    if (!remotePeers.includes(peerId)) {
+        remotePeers.push(peerId);
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                initializePeerConnection(peerId);
+                pcs[peerId].addTrack(track, localStream);
+                console.log('Added local track to new peer:', track);
+            });
+
+            try {
+                const offer = await pcs[peerId].createOffer();
+                console.log('Created offer for new peer:', offer);
+                await pcs[peerId].setLocalDescription(offer);
+                console.log('Set local description for new peer:', pcs[peerId].localDescription);
+                ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+                console.log('Sent offer SDP to new peer:', pcs[peerId].localDescription, peerId);
+            } catch (e) {
+                console.error('Failed to create offer for new peer:', e);
+            }
+        }
+    }
+}
 
 function hangup() {
     for (let peerId in pcs) {
