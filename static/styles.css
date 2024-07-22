@@ -119,9 +119,10 @@ li:hover {
 
 .chat-container {
     margin-top: 20px;
-    flex-grow: 1; /* 채팅 컨테이너가 남은 공간을 차지하도록 설정 */
+    flex-grow: 1;
     display: flex;
     flex-direction: column;
+    height: calc(100% - 80px); /* 채팅 컨테이너의 고정된 높이 설정 */
 }
 
 .chat-messages {
@@ -129,7 +130,7 @@ li:hover {
     border-radius: 5px;
     padding: 10px;
     height: 100%; /* 높이를 채팅 컨테이너에 맞게 설정 */
-    overflow-y: scroll;
+    overflow-y: auto; /* 세로 스크롤바 활성화 */
     margin-bottom: 10px;
     text-align: left;
     flex-grow: 1;

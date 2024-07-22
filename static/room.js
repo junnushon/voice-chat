@@ -348,4 +348,6 @@ function addChatMessage(message, nickname, isLocal = false) {
     messageWrapper.appendChild(messageElement);
     chatMessages.appendChild(messageWrapper);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
