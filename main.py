@@ -68,7 +68,7 @@ class ConnectionManager:
             self.room_timers[room].cancel()
             del self.room_timers[room]
 
-        await self.broadcast_new_peer(room, user_id)
+        # await self.broadcast_new_peer(room, user_id)
         asyncio.create_task(self.send_user_count(room))
 
     def disconnect(self, websocket: WebSocket):

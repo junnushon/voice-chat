@@ -45,6 +45,7 @@ async function fetchRemotePeers() {
         const response = await fetch(`/room/${roomId}/users`);
         const data = await response.json();
         remotePeers = data.users.filter(id => id !== userId); // 자신을 제외한 사용자 목록
+        console.log("Received remotePeers:", remotePeers)
     } catch (e) {
         console.error('Error fetching remote peers:', e);
     }
