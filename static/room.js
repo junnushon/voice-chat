@@ -84,6 +84,7 @@ async function handleIceCandidate(peerId, candidate) {
     }
 }
 
+
 async function handleRemoteDescription(peerId, sdp) {
     if (!pcs[peerId]) {
         initializePeerConnection(peerId);
@@ -165,12 +166,12 @@ async function setupWebSocket() {
         const message = event.data;
         const data = JSON.parse(message);
         console.log('Received message:', data);
-
+    
         if (data.from && data.to && data.from === data.to) {
             console.log('Ignoring message from self');
             return;
         }
-
+    
         if (data.type === 'user_count') {
             console.log(`Updating user count to ${data.user_count}`);
             if (userCountDiv) {
@@ -193,6 +194,7 @@ async function setupWebSocket() {
             }
         }
     };
+    
 
     ws.onclose = (event) => {
         if (event.reason === "Invalid password") {
@@ -291,7 +293,7 @@ async function addPeer(peerId) {
 function hangup(peerId) {
     if (pcs[peerId]) {
         pcs[peerId].close();
-        pcs[peerId] = null;
+        delete pcs[peerId];
         console.log(`Peer connection closed for peer: ${peerId}`);
     }
 }
