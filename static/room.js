@@ -236,20 +236,12 @@ function initializePeerConnection(peerId) {
     pcs[peerId].ontrack = event => {
         if (event.streams && event.streams[0]) {
             console.log('Received remote stream:', event.streams[0]);
-            // 원격 스트림을 설정합니다.
-            remoteAudio.srcObject = event.streams[0];
-        } else {
-            // 개별 트랙을 처리합니다.
-            let inboundStream = null;
-            if (!inboundStream) {
-                inboundStream = new MediaStream();
-                remoteAudio.srcObject = inboundStream;
+            if (peerId !== userId) {
+                remoteAudio.srcObject = event.streams[0];
             }
-            inboundStream.addTrack(event.track);
         }
     };
 }
-
 
 async function addPeer(peerId) {
     if (!remotePeers.includes(peerId)) {
