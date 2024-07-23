@@ -105,7 +105,7 @@ async function handleRemoteDescription(peerId, sdp) {
                     console.log('Added local track to peer:', track);
                 });
             }
-            
+
             const answer = await pcs[peerId].createAnswer();
             await pcs[peerId].setLocalDescription(answer);
             console.log('Created and sent Answer:', answer);
@@ -176,9 +176,9 @@ async function setupWebSocket() {
             if (userCountDiv) {
                 userCountDiv.textContent = `${data.user_count}`;
             }
-        } else if (data.from && data.to && data.to === userId && data.sdp) {
+        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.sdp) {
             await handleRemoteDescription(data.from, data.sdp);
-        } else if (data.from && data.to && data.to === userId && data.candidate) {
+        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.candidate) {
             await handleIceCandidate(data.from, data.candidate);
         } else if (data.type === 'chat') {
             addChatMessage(data.message, data.nickname);
