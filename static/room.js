@@ -248,6 +248,7 @@ function initializePeerConnection(peerId) {
             console.log('Received remote stream:', event.streams[0]);
             if (peerId !== userId) {
                 remoteAudio.srcObject = event.streams[0];
+                console.log("added remote stream")
             }
         }
     };
