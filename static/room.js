@@ -98,6 +98,14 @@ async function handleRemoteDescription(peerId, sdp) {
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (offer) set for peer ${peerId}`);
             
+            // 두 번째 피어의 로컬 스트림을 추가합니다.
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    pcs[peerId].addTrack(track, localStream);
+                    console.log('Added local track to peer:', track);
+                });
+            }
+            
             const answer = await pcs[peerId].createAnswer();
             await pcs[peerId].setLocalDescription(answer);
             console.log('Created and sent Answer:', answer);
