@@ -34,22 +34,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     nicknameDisplay.textContent = nickname; // 닉네임 표시 추가
     await start();
-    await fetchRemotePeers();
     await setupWebSocket();
-    await call();
     chatInput.focus(); // 포커스를 텍스트 입력창으로 옮기기
 });
-
-async function fetchRemotePeers() {
-    try {
-        const response = await fetch(`/room/${roomId}/users`);
-        const data = await response.json();
-        remotePeers = data.users.filter(id => id !== userId); // 자신을 제외한 사용자 목록
-        console.log("Received remotePeers:", remotePeers)
-    } catch (e) {
-        console.error('Error fetching remote peers:', e);
-    }
-}
 
 leaveRoomButton.onclick = leaveRoom;
 sendButton.onclick = sendMessage;
@@ -138,7 +125,6 @@ async function handleRemoteDescription(peerId, sdp) {
     }
 }
 
-
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
     const rooms = await response.json();
@@ -149,62 +135,60 @@ async function fetchRoomTitle() {
 }
 
 async function setupWebSocket() {
-    return new Promise((resolve, reject) => {
-        let wsUrl = `ws://localhost:8000/ws?room=${roomId}&user_id=${userId}`;
-        if (roomPassword) {
-            wsUrl += `&password=${roomPassword}`;
+    let wsUrl = `ws://localhost:8000/ws?room=${roomId}&user_id=${userId}`;
+    if (roomPassword) {
+        wsUrl += `&password=${roomPassword}`;
+    }
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('WebSocket connection established');
+        ws.send(JSON.stringify({ type: 'new_peer', peerId: userId }));
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        alert('Failed to connect to the room. Please check the password and try again.');
+        window.location.href = '/';
+    };
+
+    ws.onmessage = async (event) => {
+        const message = event.data;
+        const data = JSON.parse(message);
+        console.log('Received message:', data);
+
+        if (data.from && data.to && data.from === data.to) {
+            console.log('Ignoring message from self');
+            return;
         }
-        ws = new WebSocket(wsUrl);
 
-        ws.onopen = () => {
-            console.log('WebSocket connection established');
-            resolve();
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            alert('Failed to connect to the room. Please check the password and try again.');
-            window.location.href = '/';
-            reject(error);
-        };
-
-        ws.onmessage = async (event) => {
-            const message = event.data;
-            const data = JSON.parse(message);
-            console.log('Received message:', data);
-        
-            if (data.from && data.to && data.from === data.to) {
-                console.log('Ignoring message from self');
-                return;
+        if (data.type === 'user_count') {
+            console.log(`Updating user count to ${data.user_count}`);
+            if (userCountDiv) {
+                userCountDiv.textContent = `${data.user_count}`;
             }
-        
-            if (data.type === 'user_count') {
-                console.log(`Updating user count to ${data.user_count}`);
-                if (userCountDiv) {
-                    userCountDiv.textContent = `${data.user_count}`;
-                }
-            } else if (data.from && data.to && data.to === userId && data.sdp) {
-                await handleRemoteDescription(data.from, data.sdp);
-            } else if (data.from && data.to && data.to === userId && data.candidate) {
-                await handleIceCandidate(data.from, data.candidate);
-            } else if (data.type === 'chat') {
-                addChatMessage(data.message, data.nickname);
-            } else if (data.type === 'new_peer') {
+        } else if (data.from && data.to && data.to === userId && data.sdp) {
+            await handleRemoteDescription(data.from, data.sdp);
+        } else if (data.from && data.to && data.to === userId && data.candidate) {
+            await handleIceCandidate(data.from, data.candidate);
+        } else if (data.type === 'chat') {
+            addChatMessage(data.message, data.nickname);
+        } else if (data.type === 'new_peer') {
+            if (userId !== data.peerId) {
                 await addPeer(data.peerId);
             }
-        };
-        
+        }
+    };
 
-        ws.onclose = (event) => {
-            if (event.reason === "Invalid password") {
-                alert("Invalid password. Please try again.");
-                window.location.href = '/';
-            } else if (event.reason === "Room does not exist") {
-                alert("Room does not exist. Please try again.");
-                window.location.href = '/';
-            }
-        };
-    });
+    ws.onclose = (event) => {
+        if (event.reason === "Invalid password") {
+            alert("Invalid password. Please try again.");
+            window.location.href = '/';
+        } else if (event.reason === "Room does not exist") {
+            alert("Room does not exist. Please try again.");
+            window.location.href = '/';
+        }
+    };
 }
 
 async function start() {
@@ -225,36 +209,9 @@ async function start() {
     }
 }
 
-async function call() {
-    console.log('Starting call...');
-
-    localStream.getTracks().forEach(track => {
-        for (let peerId of remotePeers) { // remotePeers를 사용하여 피어 연결 초기화
-            if (!pcs[peerId]) {
-                initializePeerConnection(peerId);
-            }
-            pcs[peerId].addTrack(track, localStream);
-            console.log('Added local track:', track);
-        }
-    });
-
-    for (let peerId of remotePeers) { // remotePeers를 사용하여 피어 연결 초기화
-        try {
-            const offer = await pcs[peerId].createOffer();
-            console.log('Created offer:', offer);
-            await pcs[peerId].setLocalDescription(offer);
-            console.log('Set local description:', pcs[peerId].localDescription);
-            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
-            console.log('Sent offer SDP:', pcs[peerId].localDescription, peerId);
-        } catch (e) {
-            console.error('Failed to create offer:', e);
-        }
-    }
-}
-
 function initializePeerConnection(peerId) {
     console.log("initializePeerConnection called !!")
-    if (pcs[peerId]) return; // 이미 초기화된 경우 무시
+    if (pcs[peerId]) return;
     pcs[peerId] = new RTCPeerConnection({
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
@@ -284,28 +241,27 @@ function initializePeerConnection(peerId) {
     };
 }
 
-
-// 새로운 사용자가 방에 들어올 때 호출되는 함수
 async function addPeer(peerId) {
     if (!remotePeers.includes(peerId)) {
         remotePeers.push(peerId);
+        initializePeerConnection(peerId);
+
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                initializePeerConnection(peerId);
                 pcs[peerId].addTrack(track, localStream);
                 console.log('Added local track to new peer:', track);
             });
+        }
 
-            try {
-                const offer = await pcs[peerId].createOffer();
-                console.log('Created offer for new peer:', offer);
-                await pcs[peerId].setLocalDescription(offer);
-                console.log('Set local description for new peer:', pcs[peerId].localDescription);
-                ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
-                console.log('Sent offer SDP to new peer:', pcs[peerId].localDescription, peerId);
-            } catch (e) {
-                console.error('Failed to create offer for new peer:', e);
-            }
+        try {
+            const offer = await pcs[peerId].createOffer();
+            console.log('Created offer for new peer:', offer);
+            await pcs[peerId].setLocalDescription(offer);
+            console.log('Set local description for new peer:', pcs[peerId].localDescription);
+            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+            console.log('Sent offer SDP to new peer:', pcs[peerId].localDescription, peerId);
+        } catch (e) {
+            console.error('Failed to create offer for new peer:', e);
         }
     }
 }
