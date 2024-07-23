@@ -80,6 +80,7 @@ class ConnectionManager:
                     if not self.rooms[room]:
                         self.room_timers[room] = asyncio.get_event_loop().call_later(300, self.delete_room, room)
                     asyncio.create_task(self.send_user_count(room))
+                    asyncio.create_task(self.broadcast_peer_left(room, user_id))
                     return
 
     async def broadcast(self, message: str, sender: WebSocket, room: str):
@@ -103,6 +104,16 @@ class ConnectionManager:
                     print(f'New peer message sent to connection in room {room}')
                 except Exception as e:
                     print(f'Error sending new peer message to connection in room {room}: {e}')
+
+    async def broadcast_peer_left(self, room: str, peer_id: str):
+        message = json.dumps({"type": "peer_left", "peerId": peer_id})
+        for user_id, connection in self.rooms[room].items():
+            try:
+                await connection.send_text(message)
+                print(f'Peer left message sent to connection in room {room}')
+            except Exception as e:
+                print(f'Error sending peer left message to connection in room {room}: {e}')
+
 
     def get_room_info(self):
         return [
@@ -151,6 +162,7 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), user_
                 print("Received message is not a valid JSON")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        await manager.broadcast_peer_left(room, user_id) 
 
 @app.get("/room/{room_id}/users", response_model=RoomInfoResponse)
 async def get_room_users(room_id: str):
