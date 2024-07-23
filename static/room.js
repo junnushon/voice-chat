@@ -186,6 +186,11 @@ async function setupWebSocket() {
             if (userId !== data.peerId) {
                 await addPeer(data.peerId);
             }
+        } else if (data.type === 'peer_left') {
+            if (userId !== data.peerId) {
+                console.log(`Peer ${data.peerId} has left the room`);
+                hangup(data.peerId);  // 해당 피어와의 연결만 종료
+            }
         }
     };
 
@@ -199,6 +204,7 @@ async function setupWebSocket() {
         }
     };
 }
+
 
 
 async function start() {
@@ -282,18 +288,19 @@ async function addPeer(peerId) {
     }
 }
 
-function hangup() {
-    for (let peerId in pcs) {
-        if (pcs[peerId]) {
-            pcs[peerId].close();
-            pcs[peerId] = null;
-            console.log('Peer connection closed for peer:', peerId);
-        }
+function hangup(peerId) {
+    if (pcs[peerId]) {
+        pcs[peerId].close();
+        pcs[peerId] = null;
+        console.log(`Peer connection closed for peer: ${peerId}`);
     }
 }
 
 function leaveRoom() {
-    hangup();
+    for (let peerId in pcs) {
+        hangup(peerId);
+    }
+    ws.send(JSON.stringify({ type: 'peer_left', peerId: userId }));
     window.location.href = '/';
 }
 
