@@ -250,8 +250,11 @@ async function addPeer(peerId) {
 
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                pcs[peerId].addTrack(track, localStream);
-                console.log('Added local track to new peer:', track);
+                if (track.kind === 'audio') {
+                    // 로컬 트랙이 다시 자신에게 들리지 않도록 설정
+                    pcs[peerId].addTrack(track, localStream);
+                    console.log('Added local audio track to new peer:', track);
+                }
             });
         }
 
