@@ -94,7 +94,7 @@ async function handleRemoteDescription(peerId, sdp) {
     console.log(`Current signaling state for peer ${peerId}:`, currentState);
     
     try {
-        if (rtcSessionDescription.type === 'offer' && currentState === 'stable') {
+        if (rtcSessionDescription.type === 'offer') {
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (offer) set for peer ${peerId}`);
             
@@ -102,11 +102,11 @@ async function handleRemoteDescription(peerId, sdp) {
             await pcs[peerId].setLocalDescription(answer);
             console.log('Created and sent Answer:', answer);
             ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
-        } else if (rtcSessionDescription.type === 'answer' && currentState === 'have-local-offer') {
+        } else if (rtcSessionDescription.type === 'answer') {
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (answer) set for peer ${peerId}`);
         } else {
-            console.log(`Unexpected SDP type or state: ${rtcSessionDescription.type}, ${currentState}`);
+            console.log(`Unexpected SDP type: ${rtcSessionDescription.type}`);
         }
 
         if (pendingIceCandidates[peerId]) {
@@ -124,6 +124,7 @@ async function handleRemoteDescription(peerId, sdp) {
         console.error(`Error setting remote description for peer ${peerId}`, e);
     }
 }
+
 
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
@@ -167,9 +168,9 @@ async function setupWebSocket() {
             if (userCountDiv) {
                 userCountDiv.textContent = `${data.user_count}`;
             }
-        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.sdp) {
+        } else if (data.from && data.to && data.to === userId && data.sdp) {
             await handleRemoteDescription(data.from, data.sdp);
-        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.candidate) {
+        } else if (data.from && data.to && data.to === userId && data.candidate) {
             await handleIceCandidate(data.from, data.candidate);
         } else if (data.type === 'chat') {
             addChatMessage(data.message, data.nickname);
@@ -190,6 +191,7 @@ async function setupWebSocket() {
         }
     };
 }
+
 
 async function start() {
     console.log('Starting local stream...');
