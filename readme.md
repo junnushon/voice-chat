@@ -19,7 +19,7 @@ FastAPI와 WebSockets를 사용하여 구축된 웹 기반 음성 채팅 애플�
 
 ## Live Site / 라이브 사이트
 
-You can access the live site here: [voicechatweb.site](https://voicechatweb.site/)
+You can access the live site here: [voicechatweb.com](https://voicechatweb.com/)
 
 ## Features
 
