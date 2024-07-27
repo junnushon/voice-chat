@@ -68,21 +68,27 @@ func generateRoomHash(roomName string) string {
 }
 
 func (manager *ConnectionManager) connect(c *gin.Context, room, userID, password string) (*websocket.Conn, error) {
+	fmt.Println("Attempting to upgrade to WebSocket...")
 	conn, err := manager.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		fmt.Printf("WebSocket upgrade error: %v\n", err)
 		return nil, err
 	}
+
+	fmt.Println("WebSocket connection established")
 
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 
 	if _, ok := manager.rooms[room]; !ok {
+		fmt.Println("Room does not exist")
 		conn.Close()
 		return nil, errors.New("room does not exist")
 	}
 
 	roomPassword := manager.roomDetails[room].Password
 	if roomPassword != "" && roomPassword != password {
+		fmt.Println("Invalid password")
 		conn.Close()
 		return nil, errors.New("invalid password")
 	}
@@ -221,8 +227,11 @@ func main() {
 		userID := c.Query("user_id")
 		password := c.Query("password")
 
+		fmt.Printf("WebSocket request received: room=%s, user_id=%s\n", room, userID)
+
 		conn, err := manager.connect(c, room, userID, password)
 		if err != nil {
+			fmt.Printf("Error connecting: %v\n", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -232,6 +241,7 @@ func main() {
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
+				fmt.Printf("Error reading message: %v\n", err)
 				break
 			}
 
