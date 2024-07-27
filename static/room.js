@@ -182,7 +182,10 @@ async function setupWebSocket() {
         } else if (data.from && data.to && data.to === userId && data.from !== userId && data.candidate) {
             await handleIceCandidate(data.from, data.candidate);
         } else if (data.type === 'chat') {
-            addChatMessage(data.message, data.nickname);
+            // Only add remote messages here
+            if (data.nickname !== nickname) {
+                addChatMessage(data.message, data.nickname);
+            }
         } else if (data.type === 'new_peer') {
             if (userId !== data.peerId) {
                 await addPeer(data.peerId);
@@ -190,7 +193,7 @@ async function setupWebSocket() {
         } else if (data.type === 'peer_left') {
             if (userId !== data.peerId) {
                 console.log(`Peer ${data.peerId} has left the room`);
-                hangup(data.peerId);  // 해당 피어와의 연결만 종료
+                hangup(data.peerId);
             }
         }
     };
@@ -309,8 +312,12 @@ function leaveRoom() {
 function sendMessage() {
     const message = chatInput.value.trim();
     if (message) {
-        ws.send(JSON.stringify({ type: 'chat', message, nickname }));
+        // Add message locally first
         addChatMessage(message, nickname, true);
+
+        // Send message to others via WebSocket
+        ws.send(JSON.stringify({ type: 'chat', message, nickname }));
+        
         chatInput.value = '';
     }
 }
@@ -319,6 +326,7 @@ function addChatMessage(message, nickname, isLocal = false) {
     const messageWrapper = document.createElement('div');
     const messageElement = document.createElement('div');
     messageElement.classList.add('chat-message');
+    
     if (isLocal) {
         messageElement.classList.add('local');
         messageElement.innerHTML = message;
@@ -327,9 +335,8 @@ function addChatMessage(message, nickname, isLocal = false) {
         messageElement.innerHTML = `<strong>${nickname}:</strong> ${message}`;
         messageWrapper.style.textAlign = 'left';
     }
+
     messageWrapper.appendChild(messageElement);
     chatMessages.appendChild(messageWrapper);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
