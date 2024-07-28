@@ -23,6 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
+console.log('App version: 1.0.5');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
