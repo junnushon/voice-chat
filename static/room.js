@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.14');
+console.log('App version: 1.0.15');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -272,10 +272,11 @@ function initializePeerConnection(peerId) {
         }
     };
 
-    pcs[peerId].oniceconnectionstatechange = e => {
+    pcs[peerId].oniceconnectionstatechange = async e => {
         console.log(`ICE connection state change for ${peerId}:`, pcs[peerId].iceConnectionState);
-        if (pcs[peerId].iceConnectionState === 'disconnected') {
-            hangup(peerId);
+        if (pcs[peerId].iceConnectionState === 'disconnected' || pcs[peerId].iceConnectionState === 'failed') {
+            console.log(`Connection to peer ${peerId} lost. Attempting to reconnect...`);
+            await reconnectPeer(peerId);
         }
     };
 
@@ -301,7 +302,22 @@ function initializePeerConnection(peerId) {
 }
 
 
+async function reconnectPeer(peerId) {
+    if (!pcs[peerId]) {
+        initializePeerConnection(peerId);
+    }
 
+    try {
+        const offer = await pcs[peerId].createOffer();
+        console.log(`Created offer for peer ${peerId}:`, offer);
+        await pcs[peerId].setLocalDescription(offer);
+        console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
+        ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+        console.log(`Sent offer SDP to peer ${peerId}`);
+    } catch (e) {
+        console.error(`Failed to create offer for peer ${peerId}:`, e);
+    }
+}
 
 
 
