@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.8');
+console.log('App version: 1.0.9');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -102,14 +102,13 @@ async function handleRemoteDescription(peerId, sdp) {
     const currentState = pcs[peerId].signalingState;
     console.log(`Current signaling state for peer ${peerId}:`, currentState);
 
-    // `stable` 상태인데 `answer`를 보내지 않은 경우, 무시하거나 적절하게 처리
-    if (currentState === 'stable' && rtcSessionDescription.type !== 'answer') {
-        console.log(`Peer ${peerId} is already connected. Ignoring SDP of type ${rtcSessionDescription.type}`);
-        return;
-    }
-
     try {
         if (rtcSessionDescription.type === 'offer') {
+            if (currentState === 'stable') {
+                console.log(`Peer ${peerId} is already connected. Ignoring offer.`);
+                return;
+            }
+
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (offer) set for peer ${peerId}`);
             
@@ -125,6 +124,10 @@ async function handleRemoteDescription(peerId, sdp) {
             console.log('Created and sent Answer:', answer);
             ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
         } else if (rtcSessionDescription.type === 'answer') {
+            if (currentState !== 'have-local-offer') {
+                console.log(`Unexpected SDP type ${rtcSessionDescription.type} for current signaling state ${currentState}`);
+                return;
+            }
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (answer) set for peer ${peerId}`);
         } else {
@@ -146,6 +149,7 @@ async function handleRemoteDescription(peerId, sdp) {
         console.error(`Error setting remote description for peer ${peerId}`, e);
     }
 }
+
 
 
 
@@ -248,7 +252,7 @@ async function start() {
 
 function initializePeerConnection(peerId) {
     if (pcs[peerId]) return;
-    
+
     console.log(`Initializing peer connection for ${peerId}`);
     pcs[peerId] = new RTCPeerConnection({
         iceServers: [
@@ -270,6 +274,10 @@ function initializePeerConnection(peerId) {
         }
     };
 
+    pcs[peerId].onsignalingstatechange = e => {
+        console.log(`Signaling state change for ${peerId}:`, pcs[peerId].signalingState);
+    };
+
     pcs[peerId].onconnectionstatechange = e => {
         console.log(`Peer connection state change for ${peerId}:`, pcs[peerId].connectionState);
         if (pcs[peerId].connectionState === 'disconnected') {
@@ -286,6 +294,7 @@ function initializePeerConnection(peerId) {
         }
     };
 }
+
 
 
 async function addPeer(peerId) {
