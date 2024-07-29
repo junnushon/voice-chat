@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.6');
+console.log('App version: 1.0.7');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -69,6 +69,12 @@ async function handleIceCandidate(peerId, candidate) {
 
     addedIceCandidates[peerId].add(candidateId);
 
+    // 연결 상태가 'stable'인 경우, ICE 후보를 처리하지 않음
+    if (pcs[peerId] && pcs[peerId].iceConnectionState === 'connected') {
+        console.log(`Peer ${peerId} is already connected. Ignoring ICE candidate.`);
+        return;
+    }
+
     if (pcs[peerId] && pcs[peerId].remoteDescription && pcs[peerId].remoteDescription.type) {
         try {
             await pcs[peerId].addIceCandidate(new RTCIceCandidate(candidate));
@@ -86,6 +92,7 @@ async function handleIceCandidate(peerId, candidate) {
 }
 
 
+
 async function handleRemoteDescription(peerId, sdp) {
     if (!pcs[peerId]) {
         initializePeerConnection(peerId);
@@ -94,13 +101,18 @@ async function handleRemoteDescription(peerId, sdp) {
     const rtcSessionDescription = new RTCSessionDescription(sdp);
     const currentState = pcs[peerId].signalingState;
     console.log(`Current signaling state for peer ${peerId}:`, currentState);
-    
+
+    // 연결 상태가 'stable'인 경우, SDP를 처리하지 않음
+    if (currentState === 'stable' && rtcSessionDescription.type === 'offer') {
+        console.log(`Peer ${peerId} is already connected. Ignoring offer.`);
+        return;
+    }
+
     try {
         if (rtcSessionDescription.type === 'offer') {
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (offer) set for peer ${peerId}`);
             
-            // 두 번째 피어의 로컬 스트림을 추가합니다.
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     pcs[peerId].addTrack(track, localStream);
@@ -134,6 +146,7 @@ async function handleRemoteDescription(peerId, sdp) {
         console.error(`Error setting remote description for peer ${peerId}`, e);
     }
 }
+
 
 
 async function fetchRoomTitle() {
