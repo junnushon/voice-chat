@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.9');
+console.log('App version: 1.0.10');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -104,8 +104,8 @@ async function handleRemoteDescription(peerId, sdp) {
 
     try {
         if (rtcSessionDescription.type === 'offer') {
-            if (currentState === 'stable') {
-                console.log(`Peer ${peerId} is already connected. Ignoring offer.`);
+            if (currentState !== 'stable') {
+                console.log(`Unexpected offer in state ${currentState}. Ignoring.`);
                 return;
             }
 
@@ -125,9 +125,10 @@ async function handleRemoteDescription(peerId, sdp) {
             ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
         } else if (rtcSessionDescription.type === 'answer') {
             if (currentState !== 'have-local-offer') {
-                console.log(`Unexpected SDP type ${rtcSessionDescription.type} for current signaling state ${currentState}`);
+                console.log(`Unexpected answer in state ${currentState}. Ignoring.`);
                 return;
             }
+
             await pcs[peerId].setRemoteDescription(rtcSessionDescription);
             console.log(`Remote description (answer) set for peer ${peerId}`);
         } else {
@@ -149,6 +150,7 @@ async function handleRemoteDescription(peerId, sdp) {
         console.error(`Error setting remote description for peer ${peerId}`, e);
     }
 }
+
 
 
 
@@ -215,6 +217,7 @@ async function setupWebSocket() {
             }
         }
     };
+    
     
     
     
@@ -294,6 +297,7 @@ function initializePeerConnection(peerId) {
         }
     };
 }
+
 
 
 
