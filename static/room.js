@@ -164,7 +164,7 @@ async function fetchRoomTitle() {
 }
 
 async function setupWebSocket() {
-    let wsUrl = `ws://localhost:8000/ws?room=${roomId}&user_id=${userId}`;
+    let wsUrl = `wss://chat.deeptoon.co.kr/ws?room=${roomId}&user_id=${userId}`;
     if (roomPassword) {
         wsUrl += `&password=${roomPassword}`;
     }
