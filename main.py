@@ -68,7 +68,6 @@ class ConnectionManager:
             self.room_timers[room].cancel()
             del self.room_timers[room]
 
-        # await self.broadcast_new_peer(room, user_id)
         asyncio.create_task(self.send_user_count(room))
 
     def disconnect(self, websocket: WebSocket):
@@ -83,17 +82,29 @@ class ConnectionManager:
                     asyncio.create_task(self.broadcast_peer_left(room, user_id))
                     return
 
-    async def broadcast(self, message: str, sender: WebSocket, room: str):
+    async def broadcast(self, message: str, sender: WebSocket, room: str, target_id: str = None):
         if room not in self.rooms:
             print(f'Room {room} not found')
             return
-        for connection in self.rooms[room].values():
-            if connection != sender:
+
+        if target_id:
+            # 특정 대상에게만 메시지 전송
+            target_ws = self.rooms[room].get(target_id)
+            if target_ws and target_ws != sender:
                 try:
-                    await connection.send_text(message)
-                    # print(f'Message sent to connection in room {room}')
+                    await target_ws.send_text(message)
+                    print(f'Message sent to target {target_id} in room {room}')
                 except Exception as e:
-                    print(f'Error sending message to connection in room {room}: {e}')
+                    print(f'Error sending message to target {target_id} in room {room}: {e}')
+        else:
+            # 모든 사용자에게 메시지 전송
+            for connection in self.rooms[room].values():
+                if connection != sender:
+                    try:
+                        await connection.send_text(message)
+                        # print(f'Message sent to connection in room {room}')
+                    except Exception as e:
+                        print(f'Error sending message to connection in room {room}: {e}')
 
     async def broadcast_new_peer(self, room: str, new_peer_id: str):
         message = json.dumps({"type": "new_peer", "peerId": new_peer_id})
@@ -113,7 +124,6 @@ class ConnectionManager:
                 print(f'Peer left message sent to connection in room {room}')
             except Exception as e:
                 print(f'Error sending peer left message to connection in room {room}: {e}')
-
 
     def get_room_info(self):
         return [
@@ -154,15 +164,19 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), user_
             try:
                 data_json = json.loads(data)
                 message_type = data_json.get("type")
+                target_id = data_json.get("to")  # 메시지의 목적지
+
                 if message_type == "chat":
                     await manager.broadcast(json.dumps(data_json), websocket, room)
+                elif target_id:
+                    await manager.broadcast(json.dumps(data_json), websocket, room, target_id)  # 특정 대상에게만 메시지 전송
                 else:
                     await manager.broadcast(data, websocket, room)
             except json.JSONDecodeError:
                 print("Received message is not a valid JSON")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        await manager.broadcast_peer_left(room, user_id) 
+        await manager.broadcast_peer_left(room, user_id)
 
 @app.get("/room/{room_id}/users", response_model=RoomInfoResponse)
 async def get_room_users(room_id: str):
@@ -193,7 +207,6 @@ async def create_room(room: Room):
         "is_private": room.is_private
     }
     return {"id": room_id, "name": room.name, "is_private": room.is_private}
-
 
 @app.post("/check_password")
 async def check_password(payload: PasswordCheckRequest):

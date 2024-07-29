@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.13');
+console.log('App version: 1.0.14');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -191,28 +191,30 @@ async function setupWebSocket() {
         const message = event.data;
         const data = JSON.parse(message);
         console.log('Received message:', data);
-    
-        if (data.from && data.to && data.from === data.to && data.to !== userId) {
+
+        if (data.from && data.to && data.from === data.to) {
             console.log('Ignoring message from self');
             return;
         }
-    
+
         if (data.type === 'user_count') {
             console.log(`Updating user count to ${data.user_count}`);
             if (userCountDiv) {
                 userCountDiv.textContent = `${data.user_count}`;
             }
-        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.sdp) {
-            await handleRemoteDescription(data.from, data.sdp);
-        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.candidate) {
-            await handleIceCandidate(data.from, data.candidate);
+        } else if (data.to === userId) { // 목적지가 자신일 때만 처리
+            if (data.sdp) {
+                await handleRemoteDescription(data.from, data.sdp);
+            } else if (data.candidate) {
+                await handleIceCandidate(data.from, data.candidate);
+            }
         } else if (data.type === 'chat') {
             if (data.nickname !== nickname) {
                 addChatMessage(data.message, data.nickname);
             }
         } else if (data.type === 'new_peer') {
             if (userId !== data.peerId) {
-                await addPeer(data.peerId, true); // 새로 들어온 peer에게만 offer를 보냄
+                await addPeer(data.peerId, true); // 새로운 peer에게만 offer를 보냄
             }
         } else if (data.type === 'peer_left') {
             if (userId !== data.peerId) {
