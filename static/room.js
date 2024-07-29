@@ -15,13 +15,15 @@ const copyLinkButton = document.getElementById('copyLinkButton');
 const nicknameDisplay = document.getElementById('nicknameDisplay');
 
 let localStream;
-let peerConnection;
+let pcs = {};
 let ws;
 let nickname = '';
 let userId = uuidv4();
-
-console.log('userId:', userId);
-console.log('App version: 1.1.0');
+let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
+let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
+let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
+console.log('userId:', userId)
+console.log('App version: 1.0.11');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -31,10 +33,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/';
         return;
     }
-    nicknameDisplay.textContent = nickname;
+    nicknameDisplay.textContent = nickname; // 닉네임 표시 추가
     await start();
     await setupWebSocket();
-    chatInput.focus();
+    chatInput.focus(); // 포커스를 텍스트 입력창으로 옮기기
 });
 
 leaveRoomButton.onclick = leaveRoom;
@@ -53,6 +55,110 @@ copyLinkButton.onclick = () => {
         alert('Failed to copy the link.');
     });
 };
+
+async function handleIceCandidate(peerId, candidate) {
+    const candidateId = `${candidate.sdpMid}:${candidate.sdpMLineIndex}:${candidate.candidate}`;
+    if (!addedIceCandidates[peerId]) {
+        addedIceCandidates[peerId] = new Set();
+    }
+
+    if (addedIceCandidates[peerId].has(candidateId)) {
+        console.log(`Duplicate ICE candidate for peer ${peerId} ignored: ${candidateId}`);
+        return;
+    }
+
+    addedIceCandidates[peerId].add(candidateId);
+
+    if (pcs[peerId] && pcs[peerId].iceConnectionState === 'connected') {
+        console.log(`Peer ${peerId} is already connected. Ignoring ICE candidate.`);
+        return;
+    }
+
+    if (pcs[peerId] && pcs[peerId].remoteDescription && pcs[peerId].remoteDescription.type) {
+        try {
+            await pcs[peerId].addIceCandidate(new RTCIceCandidate(candidate));
+            console.log(`Added ICE candidate for peer ${peerId}`);
+        } catch (e) {
+            console.error(`Error adding ICE candidate for peer ${peerId}`, e);
+        }
+    } else {
+        if (!pendingIceCandidates[peerId]) {
+            pendingIceCandidates[peerId] = [];
+        }
+        pendingIceCandidates[peerId].push(candidate);
+        console.log(`Queued ICE candidate for peer ${peerId}`);
+    }
+}
+
+
+
+
+
+
+async function handleRemoteDescription(peerId, sdp) {
+    if (!pcs[peerId]) {
+        initializePeerConnection(peerId);
+    }
+
+    const rtcSessionDescription = new RTCSessionDescription(sdp);
+    const currentState = pcs[peerId].signalingState;
+    console.log(`Current signaling state for peer ${peerId}:`, currentState);
+
+    try {
+        if (rtcSessionDescription.type === 'offer') {
+            if (currentState !== 'stable' && currentState !== 'have-local-offer') {
+                console.log(`Unexpected offer in state ${currentState}. Ignoring.`);
+                return;
+            }
+
+            await pcs[peerId].setRemoteDescription(rtcSessionDescription);
+            console.log(`Remote description (offer) set for peer ${peerId}`);
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    pcs[peerId].addTrack(track, localStream);
+                    console.log('Added local track to peer:', track);
+                });
+            }
+
+            const answer = await pcs[peerId].createAnswer();
+            await pcs[peerId].setLocalDescription(answer);
+            console.log('Created and sent Answer:', answer);
+            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+        } else if (rtcSessionDescription.type === 'answer') {
+            if (currentState !== 'have-local-offer') {
+                console.log(`Unexpected answer in state ${currentState}. Ignoring.`);
+                return;
+            }
+
+            await pcs[peerId].setRemoteDescription(rtcSessionDescription);
+            console.log(`Remote description (answer) set for peer ${peerId}`);
+        } else {
+            console.log(`Unexpected SDP type: ${rtcSessionDescription.type}`);
+        }
+
+        if (pendingIceCandidates[peerId]) {
+            for (let candidate of pendingIceCandidates[peerId]) {
+                try {
+                    await pcs[peerId].addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log(`Added pending ICE candidate for peer ${peerId}`);
+                } catch (e) {
+                    console.error(`Error adding pending ICE candidate for peer ${peerId}`, e);
+                }
+            }
+            delete pendingIceCandidates[peerId];
+        }
+    } catch (e) {
+        console.error(`Error setting remote description for peer ${peerId}`, e);
+    }
+}
+
+
+
+
+
+
+
 
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
@@ -82,34 +188,43 @@ async function setupWebSocket() {
     };
 
     ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
+        const message = event.data;
+        const data = JSON.parse(message);
         console.log('Received message:', data);
-        
-        switch (data.type) {
-            case 'offer':
-                await handleOffer(data);
-                break;
-            case 'answer':
-                await handleAnswer(data);
-                break;
-            case 'ice-candidate':
-                await handleIceCandidate(data);
-                break;
-            case 'chat':
+    
+        if (data.from && data.to && data.from === data.to) {
+            console.log('Ignoring message from self');
+            return;
+        }
+    
+        if (data.type === 'user_count') {
+            console.log(`Updating user count to ${data.user_count}`);
+            if (userCountDiv) {
+                userCountDiv.textContent = `${data.user_count}`;
+            }
+        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.sdp) {
+            await handleRemoteDescription(data.from, data.sdp);
+        } else if (data.from && data.to && data.to === userId && data.from !== userId && data.candidate) {
+            await handleIceCandidate(data.from, data.candidate);
+        } else if (data.type === 'chat') {
+            if (data.nickname !== nickname) {
                 addChatMessage(data.message, data.nickname);
-                break;
-            case 'new_peer':
-                if (data.peerId !== userId) {
-                    await createOffer();
-                }
-                break;
-            case 'peer_left':
-                if (data.peerId !== userId) {
-                    hangup();
-                }
-                break;
+            }
+        } else if (data.type === 'new_peer') {
+            if (userId !== data.peerId) {
+                await addPeer(data.peerId);
+            }
+        } else if (data.type === 'peer_left') {
+            if (userId !== data.peerId) {
+                console.log(`Peer ${data.peerId} has left the room`);
+                hangup(data.peerId);
+            }
         }
     };
+    
+    
+    
+    
 
     ws.onclose = (event) => {
         if (event.reason === "Invalid password") {
@@ -122,12 +237,18 @@ async function setupWebSocket() {
     };
 }
 
+
+
 async function start() {
     console.log('Starting local stream...');
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                sampleRate: 44100
+            }
         });
         localStream = stream;
         console.log('Local stream started:', stream);
@@ -136,79 +257,97 @@ async function start() {
     }
 }
 
-function createPeerConnection() {
-    peerConnection = new RTCPeerConnection({
+function initializePeerConnection(peerId) {
+    if (pcs[peerId]) return;
+
+    console.log(`Initializing peer connection for ${peerId}`);
+    pcs[peerId] = new RTCPeerConnection({
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
         ]
     });
 
-    peerConnection.onicecandidate = event => {
-        if (event.candidate) {
-            ws.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+    pcs[peerId].onicecandidate = e => {
+        if (e.candidate) {
+            console.log(`Generated ICE candidate for ${peerId}:`, e.candidate);
+            ws.send(JSON.stringify({ from: userId, to: peerId, candidate: e.candidate }));
         }
     };
 
-    peerConnection.ontrack = event => {
-        remoteAudio.srcObject = event.streams[0];
+    pcs[peerId].oniceconnectionstatechange = e => {
+        console.log(`ICE connection state change for ${peerId}:`, pcs[peerId].iceConnectionState);
+        if (pcs[peerId].iceConnectionState === 'disconnected') {
+            hangup(peerId);
+        }
     };
 
-    localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
-    });
+    pcs[peerId].onsignalingstatechange = e => {
+        console.log(`Signaling state change for ${peerId}:`, pcs[peerId].signalingState);
+    };
+
+    pcs[peerId].onconnectionstatechange = e => {
+        console.log(`Peer connection state change for ${peerId}:`, pcs[peerId].connectionState);
+        if (pcs[peerId].connectionState === 'disconnected') {
+            hangup(peerId);
+        }
+    };
+
+    pcs[peerId].ontrack = event => {
+        if (event.streams && event.streams[0]) {
+            console.log(`Received remote stream from ${peerId}:`, event.streams[0]);
+            if (peerId !== userId) {
+                remoteAudio.srcObject = event.streams[0];
+            }
+        }
+    };
 }
 
-async function createOffer() {
-    createPeerConnection();
-    
-    try {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        ws.send(JSON.stringify({ type: 'offer', sdp: offer }));
-    } catch (e) {
-        console.error('Failed to create offer:', e);
+
+
+
+
+
+async function addPeer(peerId) {
+    console.log(`Adding new peer: ${peerId}`);
+    if (!remotePeers.includes(peerId)) {
+        remotePeers.push(peerId);
+        initializePeerConnection(peerId);
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                pcs[peerId].addTrack(track, localStream);
+                console.log(`Added local track to peer ${peerId}:`, track);
+            });
+        }
+
+        try {
+            const offer = await pcs[peerId].createOffer();
+            console.log(`Created offer for peer ${peerId}:`, offer);
+            await pcs[peerId].setLocalDescription(offer);
+            console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
+            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+            console.log(`Sent offer SDP to peer ${peerId}`);
+        } catch (e) {
+            console.error(`Failed to create offer for peer ${peerId}:`, e);
+        }
+    } else {
+        console.log(`Peer ${peerId} already exists`);
     }
 }
 
-async function handleOffer(data) {
-    createPeerConnection();
-    
-    try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        ws.send(JSON.stringify({ type: 'answer', sdp: answer }));
-    } catch (e) {
-        console.error('Failed to handle offer:', e);
-    }
-}
 
-async function handleAnswer(data) {
-    try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    } catch (e) {
-        console.error('Failed to handle answer:', e);
-    }
-}
-
-async function handleIceCandidate(data) {
-    try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-    } catch (e) {
-        console.error('Failed to handle ICE candidate:', e);
-    }
-}
-
-function hangup() {
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-        console.log('Peer connection closed');
+function hangup(peerId) {
+    if (pcs[peerId]) {
+        pcs[peerId].close();
+        delete pcs[peerId];
+        console.log(`Peer connection closed for peer: ${peerId}`);
     }
 }
 
 function leaveRoom() {
-    hangup();
+    for (let peerId in pcs) {
+        hangup(peerId);
+    }
     ws.send(JSON.stringify({ type: 'peer_left', peerId: userId }));
     window.location.href = '/';
 }
@@ -216,8 +355,12 @@ function leaveRoom() {
 function sendMessage() {
     const message = chatInput.value.trim();
     if (message) {
+        // Add message locally first
         addChatMessage(message, nickname, true);
+
+        // Send message to others via WebSocket
         ws.send(JSON.stringify({ type: 'chat', message, nickname }));
+        
         chatInput.value = '';
     }
 }
