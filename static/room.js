@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.11');
+console.log('App version: 1.0.12');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -212,7 +212,7 @@ async function setupWebSocket() {
             }
         } else if (data.type === 'new_peer') {
             if (userId !== data.peerId) {
-                await addPeer(data.peerId);
+                await addPeer(data.peerId, true); // 새로 들어온 peer에게만 offer를 보냄
             }
         } else if (data.type === 'peer_left') {
             if (userId !== data.peerId) {
@@ -221,10 +221,6 @@ async function setupWebSocket() {
             }
         }
     };
-    
-    
-    
-    
 
     ws.onclose = (event) => {
         if (event.reason === "Invalid password") {
@@ -307,7 +303,7 @@ function initializePeerConnection(peerId) {
 
 
 
-async function addPeer(peerId) {
+async function addPeer(peerId, sendOffer = false) {
     console.log(`Adding new peer: ${peerId}`);
     if (!remotePeers.includes(peerId)) {
         remotePeers.push(peerId);
@@ -320,15 +316,17 @@ async function addPeer(peerId) {
             });
         }
 
-        try {
-            const offer = await pcs[peerId].createOffer();
-            console.log(`Created offer for peer ${peerId}:`, offer);
-            await pcs[peerId].setLocalDescription(offer);
-            console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
-            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
-            console.log(`Sent offer SDP to peer ${peerId}`);
-        } catch (e) {
-            console.error(`Failed to create offer for peer ${peerId}:`, e);
+        if (sendOffer) { // 새로운 peer에게만 offer를 보냄
+            try {
+                const offer = await pcs[peerId].createOffer();
+                console.log(`Created offer for peer ${peerId}:`, offer);
+                await pcs[peerId].setLocalDescription(offer);
+                console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
+                ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+                console.log(`Sent offer SDP to peer ${peerId}`);
+            } catch (e) {
+                console.error(`Failed to create offer for peer ${peerId}:`, e);
+            }
         }
     } else {
         console.log(`Peer ${peerId} already exists`);
