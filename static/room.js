@@ -23,7 +23,7 @@ let remotePeers = []; // 방에 있는 다른 사용자들의 ID를 저장
 let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 console.log('userId:', userId)
-console.log('App version: 1.0.5');
+console.log('App version: 1.0.6');
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchRoomTitle();
@@ -183,7 +183,6 @@ async function setupWebSocket() {
         } else if (data.from && data.to && data.to === userId && data.from !== userId && data.candidate) {
             await handleIceCandidate(data.from, data.candidate);
         } else if (data.type === 'chat') {
-            // Only add remote messages here
             if (data.nickname !== nickname) {
                 addChatMessage(data.message, data.nickname);
             }
@@ -198,6 +197,7 @@ async function setupWebSocket() {
             }
         }
     };
+    
     
 
     ws.onclose = (event) => {
@@ -232,67 +232,75 @@ async function start() {
 }
 
 function initializePeerConnection(peerId) {
-    console.log("initializePeerConnection called !!")
     if (pcs[peerId]) return;
+    
+    console.log(`Initializing peer connection for ${peerId}`);
     pcs[peerId] = new RTCPeerConnection({
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
         ]
     });
-    console.log("initializePeerConnection events on !!")
+
     pcs[peerId].onicecandidate = e => {
         if (e.candidate) {
-            console.log('Generated ICE candidate:', e.candidate);
+            console.log(`Generated ICE candidate for ${peerId}:`, e.candidate);
             ws.send(JSON.stringify({ from: userId, to: peerId, candidate: e.candidate }));
         }
     };
 
     pcs[peerId].oniceconnectionstatechange = e => {
-        console.log('ICE connection state change:', pcs[peerId].iceConnectionState);
+        console.log(`ICE connection state change for ${peerId}:`, pcs[peerId].iceConnectionState);
+        if (pcs[peerId].iceConnectionState === 'disconnected') {
+            hangup(peerId);
+        }
     };
 
     pcs[peerId].onconnectionstatechange = e => {
-        console.log('Peer connection state change:', pcs[peerId].connectionState);
+        console.log(`Peer connection state change for ${peerId}:`, pcs[peerId].connectionState);
+        if (pcs[peerId].connectionState === 'disconnected') {
+            hangup(peerId);
+        }
     };
 
     pcs[peerId].ontrack = event => {
         if (event.streams && event.streams[0]) {
-            console.log('Received remote stream:', event.streams[0]);
+            console.log(`Received remote stream from ${peerId}:`, event.streams[0]);
             if (peerId !== userId) {
                 remoteAudio.srcObject = event.streams[0];
-                console.log("added remote stream")
             }
         }
     };
 }
 
+
 async function addPeer(peerId) {
+    console.log(`Adding new peer: ${peerId}`);
     if (!remotePeers.includes(peerId)) {
         remotePeers.push(peerId);
         initializePeerConnection(peerId);
 
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                if (track.kind === 'audio') {
-                    // 로컬 트랙이 다시 자신에게 들리지 않도록 설정
-                    pcs[peerId].addTrack(track, localStream);
-                    console.log('Added local audio track to new peer:', track);
-                }
+                pcs[peerId].addTrack(track, localStream);
+                console.log(`Added local track to peer ${peerId}:`, track);
             });
         }
 
         try {
             const offer = await pcs[peerId].createOffer();
-            console.log('Created offer for new peer:', offer);
+            console.log(`Created offer for peer ${peerId}:`, offer);
             await pcs[peerId].setLocalDescription(offer);
-            console.log('Set local description for new peer:', pcs[peerId].localDescription);
+            console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
             ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
-            console.log('Sent offer SDP to new peer:', pcs[peerId].localDescription, peerId);
+            console.log(`Sent offer SDP to peer ${peerId}`);
         } catch (e) {
-            console.error('Failed to create offer for new peer:', e);
+            console.error(`Failed to create offer for peer ${peerId}:`, e);
         }
+    } else {
+        console.log(`Peer ${peerId} already exists`);
     }
 }
+
 
 function hangup(peerId) {
     if (pcs[peerId]) {
