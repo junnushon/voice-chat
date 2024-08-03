@@ -24,7 +24,7 @@ let addedIceCandidates = {}; // 추가된 ICE 후보를 저장
 let pendingIceCandidates = {}; // 대기 중인 ICE 후보를 저장
 let connectedPeers = [];
 console.log('userId:', userId);
-console.log('App version: 1.0.27');
+console.log('App version: 1.0.31');
 
 const iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -96,6 +96,23 @@ async function handleIceCandidate(peerId, candidate) {
 }
 
 async function handleRemoteDescription(peerId, sdp) {
+    // Check the number of peers in the room
+    const peerCount = Object.keys(pcs).length;
+
+    // Close existing WebRTC connection if there are 3 peers in the room
+    if (peerCount === 3 && pcs[peerId]) {
+        console.log(`Existing connection found for peer ${peerId}. Closing it due to 3 peers in the room.`);
+
+        // Remove tracks from the sender
+        pcs[peerId].getSenders().forEach(sender => {
+            pcs[peerId].removeTrack(sender);
+        });
+
+        pcs[peerId].close();
+        delete pcs[peerId];
+    }
+
+    // Initialize new WebRTC connection
     if (!pcs[peerId]) {
         initializePeerConnection(peerId);
     }
@@ -152,6 +169,9 @@ async function handleRemoteDescription(peerId, sdp) {
         console.error(`Error setting remote description for peer ${peerId}`, e);
     }
 }
+
+
+
 
 async function fetchRoomTitle() {
     const response = await fetch('/rooms');
@@ -215,8 +235,13 @@ async function setupWebSocket() {
                 hangup(data.peerId);
                 connectedPeers = connectedPeers.filter(id => id !== data.peerId);
             }
+        } else if (data.type === 'notify_offer') {
+            if (userId === data.from_peer_id) {
+                await addPeer(data.to_peer_id, true);
+            }
         }
     };
+    
     
 
     ws.onclose = (event) => {
@@ -336,60 +361,40 @@ async function reconnectAllPeers() {
 
 async function addPeer(peerId, sendOffer = false) {
     console.log(`Adding new peer: ${peerId}`);
-    if (!connectedPeers.includes(peerId)) {
-        connectedPeers.push(peerId);
-        initializePeerConnection(peerId);
 
-        if (localStream) {
-            localStream.getTracks().forEach(track => {
-                pcs[peerId].addTrack(track, localStream);
-                console.log(`Added local track to peer ${peerId}:`, track);
-            });
+    // Close existing WebRTC connection if it exists
+    if (pcs[peerId]) {
+        console.log(`Existing connection found for peer ${peerId}. Closing it.`);
+        pcs[peerId].close();
+        delete pcs[peerId];
+    }
+
+    // Initialize new WebRTC connection
+    initializePeerConnection(peerId);
+
+    // Add local stream tracks to the new peer connection
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            pcs[peerId].addTrack(track, localStream);
+            console.log(`Added local track to peer ${peerId}:`, track);
+        });
+    }
+
+    // Send offer if required
+    if (sendOffer) {
+        try {
+            const offer = await pcs[peerId].createOffer();
+            console.log(`Created offer for peer ${peerId}:`, offer);
+            await pcs[peerId].setLocalDescription(offer);
+            console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
+            ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
+            console.log(`Sent offer SDP to peer ${peerId}`);
+        } catch (e) {
+            console.error(`Failed to create offer for peer ${peerId}:`, e);
         }
-
-        if (sendOffer) {
-            try {
-                const offer = await pcs[peerId].createOffer();
-                console.log(`Created offer for peer ${peerId}:`, offer);
-                await pcs[peerId].setLocalDescription(offer);
-                console.log(`Set local description for peer ${peerId}:`, pcs[peerId].localDescription);
-                ws.send(JSON.stringify({ from: userId, to: peerId, sdp: pcs[peerId].localDescription }));
-                console.log(`Sent offer SDP to peer ${peerId}`);
-            } catch (e) {
-                console.error(`Failed to create offer for peer ${peerId}:`, e);
-            }
-        }
-
-        if (connectedPeers.length === 3) {
-            // Disconnect peers 1 and 2
-            let peer1 = connectedPeers[0];
-            let peer2 = connectedPeers[1];
-            hangup(peer1);
-            hangup(peer2);
-
-            // Reinitialize and reconnect peers 1 and 2
-            initializePeerConnection(peer1);
-            initializePeerConnection(peer2);
-
-            if (localStream) {
-                localStream.getTracks().forEach(track => {
-                    pcs[peer1].addTrack(track, localStream);
-                    pcs[peer2].addTrack(track, localStream);
-                });
-            }
-
-            try {
-                const offer = await pcs[peer1].createOffer();
-                await pcs[peer1].setLocalDescription(offer);
-                ws.send(JSON.stringify({ from: userId, to: peer2, sdp: pcs[peer1].localDescription }));
-            } catch (e) {
-                console.error(`Failed to create offer for peer ${peer1}:`, e);
-            }
-        }
-    } else {
-        console.log(`Peer ${peerId} already exists`);
     }
 }
+
 
 
 function hangup(peerId) {

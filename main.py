@@ -69,6 +69,34 @@ class ConnectionManager:
             del self.room_timers[room]
 
         asyncio.create_task(self.send_user_count(room))
+        await self.handle_three_peer_scenario(room)
+
+    async def handle_three_peer_scenario(self, room: str):
+        if len(self.rooms[room]) == 3:
+            peer_ids = list(self.rooms[room].keys())
+            peer1, peer2, peer3 = peer_ids[0], peer_ids[1], peer_ids[2]
+
+            # Notify all peers about the new peer
+            await self.broadcast_new_peer(room, peer3)
+            
+            await asyncio.sleep(2)
+            # Notify peer1 to send an offer to peer2
+            await self.notify_peer_to_offer(peer1, peer2)
+
+            await asyncio.sleep(2)
+
+            await self.notify_peer_to_offer(peer1, peer3)
+
+
+    async def notify_peer_to_offer(self, from_peer_id: str, to_peer_id: str):
+        message = json.dumps({"type": "notify_offer", "from_peer_id": from_peer_id, "to_peer_id": to_peer_id})
+        if from_peer_id in self.rooms and self.rooms[from_peer_id]:
+            connection = self.rooms[from_peer_id]
+            try:
+                await connection.send_text(message)
+                print(f'Notify offer message sent to peer {from_peer_id} to offer to {to_peer_id}')
+            except Exception as e:
+                print(f'Error sending notify offer message to peer {from_peer_id}: {e}')
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
@@ -153,6 +181,7 @@ class ConnectionManager:
             del self.room_timers[room]
             print(f'Room {room} deleted due to inactivity')
 
+
 manager = ConnectionManager()
 
 @app.websocket("/ws")
@@ -177,6 +206,7 @@ async def websocket_endpoint(websocket: WebSocket, room: str = Query(...), user_
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast_peer_left(room, user_id)
+
 
 @app.get("/room/{room_id}/users", response_model=RoomInfoResponse)
 async def get_room_users(room_id: str):
